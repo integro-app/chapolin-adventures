@@ -136,3 +136,12 @@ static func ledge_grab_points() -> Array[Vector3]:
 		Vector3(447.0, 212.0, 1.0),
 		Vector3(1225.0, 214.0, 1.0)
 	]
+
+# Plataformas moveis horizontais independentes das plataformas fixas.
+# Cada uma percorre um trilho entre min_x e max_x; "y" e o topo.
+# A primeira conecta os patamares centrais; a segunda evita um rolo.
+static func moving_platforms() -> Array[Dictionary]:
+	return [
+		{"min_x": 1105.0, "max_x": 1215.0, "y": 194.0, "width": 74.0, "speed": 45.0},
+		{"min_x": 1915.0, "max_x": 2050.0, "y": 213.0, "width": 70.0, "speed": 52.0}
+	]
