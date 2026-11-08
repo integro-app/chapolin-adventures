@@ -30,6 +30,12 @@ const ROPE_LAUNCH_MAX_SPEED := 460.0
 const ROPE_LAUNCH_UPWARD_BOOST := 185.0
 const ROPE_AIR_MOMENTUM_DRAG := 45.0
 const ROPE_AIR_STEERING := 85.0
+const ENEMY_SPEED := 46.0
+const ENEMY_HALF_WIDTH := 13.0
+const ENEMY_HEIGHT := 27.0
+const ENEMY_STOMP_BOUNCE := -245.0
+const OBSTACLE_RADIUS := 14.0
+const DAMAGE_GRACE := 1.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -77,6 +83,13 @@ var respawn_point := Stage.RESPAWN
 var checkpoint_active := false
 var stage_complete := false
 var finish_medals := 0
+var enemy_patrols: Array[Vector3] = []
+var enemy_positions: Array[Vector2] = []
+var enemy_directions: Array[float] = []
+var enemy_active: Array[bool] = []
+var moving_obstacles: Array[Vector3] = []
+var hazard_clock := 0.0
+var hurt_grace := 0.0
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -99,6 +112,9 @@ func _ready() -> void:
 	low_beams = Stage.low_beams()
 	ladders = Stage.ladders()
 	ropes = Stage.ropes()
+	enemy_patrols = Stage.enemy_patrols()
+	moving_obstacles = Stage.moving_obstacles()
+	_reset_enemies()
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
 	if ResourceLoader.exists("res://assets/chapolin_idle.png"):
@@ -118,12 +134,18 @@ func _physics_process(delta: float) -> void:
 		jump_requested = false
 		queue_redraw()
 		return
+	var previous_foot_y: float = hero_pos.y
+	hurt_grace = maxf(0.0, hurt_grace - delta)
+	hazard_clock += delta
+	_update_enemy_patrols(delta)
 	rope_regrab_delay = maxf(0.0, rope_regrab_delay - delta)
 	if _handle_rope(delta):
-		_update_level_progress()
+		if not _check_threat_collisions(previous_foot_y):
+			_update_level_progress()
 		return
 	if _handle_ladder(delta):
-		_update_level_progress()
+		if not _check_threat_collisions(previous_foot_y):
+			_update_level_progress()
 		return
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
@@ -192,6 +214,9 @@ func _physics_process(delta: float) -> void:
 	if hero_pos.y > 435.0:
 		_respawn()
 
+	if _check_threat_collisions(previous_foot_y):
+		queue_redraw()
+		return
 	_update_level_progress()
 	if stage_complete:
 		queue_redraw()
@@ -482,6 +507,71 @@ func _move_x_with_crates(distance: float) -> float:
 				next_x = gate.end.x + HERO_HALF_WIDTH
 	return next_x
 
+func _reset_enemies() -> void:
+	enemy_positions.clear()
+	enemy_directions.clear()
+	enemy_active.clear()
+	for patrol in enemy_patrols:
+		enemy_positions.append(Vector2(patrol.x, patrol.z))
+		enemy_directions.append(1.0)
+		enemy_active.append(true)
+
+func _update_enemy_patrols(delta: float) -> void:
+	for i in range(enemy_positions.size()):
+		if not enemy_active[i]:
+			continue
+		var patrol: Vector3 = enemy_patrols[i]
+		var enemy_pos: Vector2 = enemy_positions[i]
+		var direction: float = enemy_directions[i]
+		enemy_pos.x += direction * ENEMY_SPEED * delta
+		if enemy_pos.x >= patrol.y:
+			enemy_pos.x = patrol.y
+			direction = -1.0
+		elif enemy_pos.x <= patrol.x:
+			enemy_pos.x = patrol.x
+			direction = 1.0
+		enemy_positions[i] = enemy_pos
+		enemy_directions[i] = direction
+
+func _obstacle_position(obstacle: Vector3, index: int) -> Vector2:
+	var center_x: float = (obstacle.x + obstacle.y) * 0.5
+	var amplitude: float = (obstacle.y - obstacle.x) * 0.5
+	var phase: float = hazard_clock * 1.75 + float(index) * 1.8
+	return Vector2(center_x + sin(phase) * amplitude, obstacle.z - OBSTACLE_RADIUS)
+
+func _check_threat_collisions(previous_foot_y: float) -> bool:
+	if hurt_grace > 0.0 or stage_complete:
+		return false
+	var hero_height: float = CROUCH_HEIGHT if is_crouching else STAND_HEIGHT
+	var hero_box := Rect2(hero_pos.x - HERO_HALF_WIDTH, hero_pos.y - hero_height, HERO_HALF_WIDTH * 2.0, hero_height)
+	for i in range(enemy_positions.size()):
+		if not enemy_active[i]:
+			continue
+		var enemy_pos: Vector2 = enemy_positions[i]
+		var enemy_top: float = enemy_pos.y - ENEMY_HEIGHT
+		var enemy_box := Rect2(enemy_pos.x - ENEMY_HALF_WIDTH, enemy_top, ENEMY_HALF_WIDTH * 2.0, ENEMY_HEIGHT)
+		if not hero_box.intersects(enemy_box):
+			continue
+		# Ao cair de cima, o heroi vence o inimigo e ganha um pequeno rebote.
+		# Uma aproximacao lateral faz retornar ao ultimo checkpoint.
+		if previous_foot_y <= enemy_top + 6.0 and hero_pos.y > previous_foot_y + 0.1:
+			enemy_active[i] = false
+			hero_pos.y = enemy_top - 3.0
+			grounded = false
+			vertical_speed = ENEMY_STOMP_BOUNCE
+			air_time = 0.0
+			landing_timer = 0.0
+			return false
+		_respawn()
+		return true
+	for i in range(moving_obstacles.size()):
+		var center: Vector2 = _obstacle_position(moving_obstacles[i], i)
+		var obstacle_box := Rect2(center.x - OBSTACLE_RADIUS, center.y - OBSTACLE_RADIUS, OBSTACLE_RADIUS * 2.0, OBSTACLE_RADIUS * 2.0)
+		if hero_box.intersects(obstacle_box):
+			_respawn()
+			return true
+	return false
+
 func _update_level_progress() -> void:
 	# As medalhas sao opcionais, coletadas ao tocar no corpo do heroi.
 	# O progresso permanece quando ele cai e retorna ao checkpoint.
@@ -518,6 +608,8 @@ func _restart_stage() -> void:
 	stage_complete = false
 	finish_medals = 0
 	medal_count = 0
+	hazard_clock = 0.0
+	_reset_enemies()
 	for i in range(medal_collected.size()):
 		medal_collected[i] = false
 	_release_joystick()
@@ -529,6 +621,7 @@ func _restart_stage() -> void:
 
 func _respawn() -> void:
 	hero_pos = respawn_point
+	hurt_grace = DAMAGE_GRACE
 	vertical_speed = 0.0
 	grounded = true
 	move_axis = 0.0
@@ -591,6 +684,13 @@ func _draw() -> void:
 	for i in range(medals.size()):
 		if not medal_collected[i]:
 			_draw_medal(medals[i])
+	for i in range(enemy_positions.size()):
+		if enemy_active[i]:
+			_draw_paper_enemy(enemy_positions[i], enemy_directions[i])
+	for i in range(moving_obstacles.size()):
+		_draw_rolling_obstacle(_obstacle_position(moving_obstacles[i], i))
+	if hurt_grace > 0.0:
+		_draw_respawn_shield()
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
@@ -789,6 +889,36 @@ func _draw_puzzle_gate(gate: Rect2) -> void:
 	var light := Color("#7fca8b") if puzzle_gate_open else Color("#e2a26d")
 	draw_circle(Vector2(gate.position.x + gate.size.x / 2.0, gate.position.y - 10.0), 5.0, light)
 
+func _draw_paper_enemy(pos: Vector2, direction: float) -> void:
+	# Figurante de papelão com pernas mecanicas e olhos quadrados.
+	var body := Rect2(pos.x - 13.0, pos.y - 27.0, 26.0, 25.0)
+	draw_rect(body, Color("#4a3840"))
+	draw_rect(Rect2(pos.x - 10.0, pos.y - 24.0, 20.0, 19.0), Color("#c48f67"))
+	draw_rect(Rect2(pos.x - 8.0, pos.y - 21.0, 16.0, 7.0), Color("#78505a"))
+	var eye_shift: float = direction * 2.0
+	draw_rect(Rect2(pos.x - 6.0 + eye_shift, pos.y - 20.0, 4.0, 4.0), Color("#f6dea8"))
+	draw_rect(Rect2(pos.x + 2.0 + eye_shift, pos.y - 20.0, 4.0, 4.0), Color("#f6dea8"))
+	draw_line(Vector2(pos.x - 8.0, pos.y - 2.0), Vector2(pos.x - 8.0, pos.y + 1.0), Color("#45373a"), 4.0)
+	draw_line(Vector2(pos.x + 8.0, pos.y - 2.0), Vector2(pos.x + 8.0, pos.y + 1.0), Color("#45373a"), 4.0)
+	draw_line(Vector2(pos.x, pos.y - 27.0), Vector2(pos.x, pos.y - 33.0), Color("#7d655a"), 2.0)
+	draw_circle(Vector2(pos.x, pos.y - 34.0), 3.0, Color("#d5ac71"))
+
+func _draw_rolling_obstacle(center: Vector2) -> void:
+	# Rolo giratorio de cenografia, sem violencia grafica.
+	draw_circle(center + Vector2(1.0, 2.0), OBSTACLE_RADIUS + 1.0, Color("#352f3a"))
+	draw_circle(center, OBSTACLE_RADIUS, Color("#bb6d52"))
+	draw_circle(center, OBSTACLE_RADIUS - 4.0, Color("#dca475"))
+	draw_circle(center, 5.0, Color("#66505a"))
+	for i in range(4):
+		var angle: float = hazard_clock * 3.0 + float(i) * PI * 0.5
+		var spoke_end := center + Vector2(cos(angle), sin(angle)) * 10.0
+		draw_line(center, spoke_end, Color("#6d4541"), 2.0)
+	draw_circle(center, 2.0, Color("#efcb9b"))
+
+func _draw_respawn_shield() -> void:
+	# Aviso discreto de protecao temporaria apos voltar ao checkpoint.
+	draw_arc(hero_pos + Vector2(0.0, -48.0), 31.0, 0.0, TAU, 32, Color(0.95, 0.84, 0.59, 0.42), 2.0)
+
 func _draw_medal(world_pos: Vector2) -> void:
 	# Medalha de latão cenografica, consistente com a arte retro do palco.
 	draw_circle(world_pos + Vector2(1.0, 2.0), 10.0, Color("#49362f"))
@@ -827,6 +957,8 @@ func _draw_finish_screen() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(157.0, 143.0), "FASE CONCLUIDA!", HORIZONTAL_ALIGNMENT_LEFT, -1, 27, Color("#f5d697"))
 	var score_label := "MEDALHAS: %d / %d" % [finish_medals, medals.size()]
 	draw_string(ThemeDB.fallback_font, Vector2(224.0, 187.0), score_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#f0e6ce"))
+	var defeated_count: int = enemy_active.count(false)
+	draw_string(ThemeDB.fallback_font, Vector2(211.0, 211.0), "INIMIGOS: %d / %d" % [defeated_count, enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0e6ce"))
 	draw_string(ThemeDB.fallback_font, Vector2(199.0, 235.0), "PRIMEIRO EPISODIO COMPLETO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#e9c8a0"))
 	# A tela cobre o HUD, entao o reinicio precisa ficar visivel.
 	# A area coincide com o botao PULO, que continua acionando o reinicio.
@@ -966,6 +1098,7 @@ func _draw_controls() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(504.0, 26.0), "CH %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f6d47b"))
 	if checkpoint_active:
 		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
+	draw_string(ThemeDB.fallback_font, Vector2(504.0, 65.0), "ROBOS %d/%d" % [enemy_active.size() - enemy_active.count(false), enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e0bf9c"))
 
 func _input(event: InputEvent) -> void:
 	# Android editor can deliver touch events or mouse events emulated from touch.
