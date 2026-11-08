@@ -30,3 +30,13 @@ static func crates() -> Array[Rect2]:
 		Rect2(1095.0, 266.0, 34.0, 34.0),
 		Rect2(1760.0, 266.0, 34.0, 34.0)
 	]
+
+
+# Barras leves de cenografia: o heroi passa por baixo ao agachar.
+# Ficam acima do piso e abaixo da cabeca do personagem em pe.
+static func low_beams() -> Array[Rect2]:
+	return [
+		Rect2(177.0, 187.0, 60.0, 23.0),
+		Rect2(912.0, 187.0, 72.0, 23.0),
+		Rect2(1683.0, 187.0, 62.0, 23.0)
+	]
