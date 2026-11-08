@@ -1717,31 +1717,29 @@ func _draw_near_buildings() -> void:
 		draw_line(Vector2(x + 163.0, 20.0), Vector2(x + 163.0, top - 8.0), Color("#48404a"), 1.5)
 
 func _draw_stage_lighting() -> void:
-	# O teto, os refletores e os feixes de luz ficam 'fora da ficcao'.
+	# Refletores e trelicas de um estudio de 1975; luz quente contra a noite azul.
 	for i in range(4):
-		var lamp_x := 71.0 + float(i) * 166.0
+		var lamp_x: float = 65.0 + float(i) * 169.0
+		var beam_alpha: float = 0.052 + 0.009 * sin(scene_ambience_clock * 1.6 + float(i))
 		draw_colored_polygon(PackedVector2Array([
-			Vector2(lamp_x - 4.0, 37.0),
-			Vector2(lamp_x + 4.0, 37.0),
-			Vector2(lamp_x + 100.0, 300.0),
-			Vector2(lamp_x - 95.0, 300.0)
-		]), Color(1.0, 0.78, 0.52, 0.055))
-	draw_rect(Rect2(0.0, 0.0, 640.0, 19.0), Color("#211c25"))
-	draw_rect(Rect2(0.0, 19.0, 640.0, 5.0), Color("#55515c"))
-	for x in [46.0, 212.0, 378.0, 544.0]:
-		draw_line(Vector2(x, 23.0), Vector2(x, 36.0), Color("#2b2831"), 3.0)
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(x - 16.0, 38.0),
-			Vector2(x + 16.0, 38.0),
-			Vector2(x + 12.0, 54.0),
-			Vector2(x - 12.0, 54.0)
-		]), Color("#30303a"))
-		draw_rect(Rect2(x - 10.0, 48.0, 20.0, 4.0), Color("#eac38b"))
-	for i in range(9):
-		var rig_x := float(i) * 85.0
-		draw_line(Vector2(rig_x, 0.0), Vector2(rig_x + 25.0, 19.0), Color("#827786"), 1.0)
-		draw_line(Vector2(rig_x + 25.0, 0.0), Vector2(rig_x, 19.0), Color("#827786"), 1.0)
-	draw_string(ThemeDB.fallback_font, Vector2(242.0, 15.0), "ESTUDIO 1975", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e2c8a0"))
+			Vector2(lamp_x - 3.0, 41.0),
+			Vector2(lamp_x + 5.0, 41.0),
+			Vector2(lamp_x + 108.0, 300.0),
+			Vector2(lamp_x - 112.0, 300.0)
+		]), Color(1.0, 0.74, 0.45, beam_alpha))
+	draw_rect(Rect2(0.0, 0.0, 640.0, 19.0), Color("#191a2b"))
+	draw_rect(Rect2(0.0, 19.0, 640.0, 4.0), Color("#4a3856"))
+	# Trelicas cruzadas e ganchos ao longo do teto.
+	for i in range(11):
+		var rig_x: float = float(i) * 65.0
+		draw_line(Vector2(rig_x, 0.0), Vector2(rig_x + 32.0, 20.0), Color("#68506a"), 2.0)
+		draw_line(Vector2(rig_x + 32.0, 0.0), Vector2(rig_x, 20.0), Color("#68506a"), 2.0)
+	for x in [59.0, 230.0, 400.0, 564.0]:
+		draw_line(Vector2(x, 22.0), Vector2(x, 38.0), Color("#3d3446"), 3.0)
+		draw_rect(Rect2(x - 15.0, 38.0, 30.0, 17.0), Color("#262637"))
+		draw_rect(Rect2(x - 11.0, 42.0, 22.0, 9.0), Color("#4b4353"))
+		draw_rect(Rect2(x - 8.0, 51.0, 16.0, 3.0), Color("#efc189"))
+		draw_circle(Vector2(x, 53.0), 15.0, Color(1.0, 0.78, 0.45, 0.12))
 
 func _draw_decoration() -> void:
 	# Objetos fisicos decorativos; plataformas e caixas seguem as colisoes originais.
@@ -2270,19 +2268,20 @@ func _draw_ledge_grip() -> void:
 	draw_line(ledge_edge + Vector2(-6.0, 0.0), ledge_edge + Vector2(6.0, 0.0), Color("#f3d5a4"), 2.0)
 
 func _draw_health_hud() -> void:
-	# Tres coracoes indicam resistencia; vidas sao tentativas inteiras.
+	# Coracoes compactos na barra superior, sempre visiveis durante o jogo.
 	for i in range(MAX_HEALTH):
-		var x: float = 15.0 + float(i) * 25.0
-		var y: float = 64.0
-		var heart_color := Color("#d44f55") if i < health else Color("#483f47")
+		var x: float = 364.0 + float(i) * 22.0
+		var y: float = 10.0
+		var fill := Color("#ec4b53") if i < health else Color("#4a3745")
 		draw_colored_polygon(PackedVector2Array([
-			Vector2(x + 2.0, y + 5.0), Vector2(x + 6.0, y + 1.0),
-			Vector2(x + 11.0, y + 2.0), Vector2(x + 13.0, y + 5.0),
-			Vector2(x + 16.0, y + 2.0), Vector2(x + 21.0, y + 1.0),
-			Vector2(x + 24.0, y + 5.0), Vector2(x + 24.0, y + 11.0),
-			Vector2(x + 13.0, y + 21.0), Vector2(x + 2.0, y + 11.0)
-		]), heart_color)
-	draw_string(ThemeDB.fallback_font, Vector2(98.0, 80.0), "VIDAS: %d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f2ddbc"))
+			Vector2(x, y + 5.0), Vector2(x + 3.0, y + 1.0),
+			Vector2(x + 7.0, y + 1.0), Vector2(x + 9.0, y + 4.0),
+			Vector2(x + 11.0, y + 1.0), Vector2(x + 15.0, y + 1.0),
+			Vector2(x + 18.0, y + 5.0), Vector2(x + 18.0, y + 10.0),
+			Vector2(x + 9.0, y + 18.0), Vector2(x, y + 10.0)
+		]), fill)
+		draw_line(Vector2(x + 3.0, y + 4.0), Vector2(x + 7.0, y + 3.0), Color("#ff9190") if i < health else Color("#645563"), 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(440.0, 27.0), "VIDAS %02d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f2dfc3"))
 
 func _draw_game_over() -> void:
 	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.07, 0.06, 0.10, 0.87))
@@ -2296,69 +2295,82 @@ func _draw_game_over() -> void:
 	draw_rect(Rect2(514.0, 302.0, 110.0, 43.0), Color("#634b40"))
 	draw_string(ThemeDB.fallback_font, Vector2(519.0, 329.0), "REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 
-func _draw_controls() -> void:
-	# O joystick so aparece enquanto um dedo toca a metade esquerda da tela.
-	# Diagonal para baixo + lateral = caminhar agachado, sem botao dedicado.
-	if joystick_touch_id != -1:
-		draw_circle(joystick_origin, JOYSTICK_RADIUS, Color(0.06, 0.12, 0.17, 0.38))
-		draw_arc(joystick_origin, JOYSTICK_RADIUS, 0.0, TAU, 36, Color(0.92, 0.79, 0.62, 0.48), 2.0)
-		draw_circle(joystick_origin, 8.0, Color(0.81, 0.71, 0.59, 0.44))
-		var knob := joystick_origin + joystick_offset
-		draw_circle(knob, 23.0, Color(0.12, 0.23, 0.30, 0.86))
-		draw_circle(knob, 18.0, Color(0.42, 0.53, 0.53, 0.88))
-		draw_circle(knob, 8.0, Color("#f1d9b5"))
+func _draw_control_medallion(center: Vector2, radius: float, label: String, active: bool, accent: Color, font_size: int) -> void:
+	# Elemento visual; o reconhecimento dos toques continua nas areas originais.
+	var base := Color(0.13, 0.15, 0.25, 0.77) if active else Color(0.10, 0.11, 0.17, 0.47)
+	draw_circle(center + Vector2(0.0, 2.0), radius + 2.0, Color(0.04, 0.05, 0.10, 0.48))
+	draw_circle(center, radius, base)
+	draw_arc(center, radius - 1.0, 0.0, TAU, 40, accent if active else Color(0.54, 0.54, 0.61, 0.42), 2.0)
+	draw_arc(center, radius - 5.0, PI * 1.14, PI * 1.85, 15, Color(0.96, 0.89, 0.72, 0.23), 1.0)
+	var text_x: float = center.x - float(label.length()) * float(font_size) * 0.27
+	draw_string(ThemeDB.fallback_font, Vector2(text_x, center.y + float(font_size) * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE if active else Color("#aba9b4"))
 
-	# Dois ataques independentes e o PULO. Joystick permanece invisivel.
-	var hammer_color := Color("#665244") if hammer_unlocked else Color("#283540")
-	var horn_color := Color("#426274") if horn_unlocked and horn_charges > 0 else Color("#283540")
-	if hammer_swing_time > 0.0:
-		hammer_color = Color("#937252")
-	if horn_effect_time > 0.0:
-		horn_color = Color("#438aa5")
-	draw_rect(Rect2(326.0, 310.0, 98.0, 38.0), hammer_color)
-	draw_rect(Rect2(429.0, 310.0, 98.0, 38.0), horn_color)
-	draw_string(ThemeDB.fallback_font, Vector2(338.0, 334.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(438.0, 334.0), "CORNETA %d" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
-	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
-	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
-	var nano_color := Color("#6c9973") if _nano_active() else (Color("#496551") if nano_unlocked and nano_charges > 0 else Color("#283540"))
-	draw_rect(Rect2(535.0, 261.0, 90.0, 37.0), nano_color)
-	var nano_label := "NANO %ds" % int(ceil(nano_remaining)) if _nano_active() else "NANO %d" % nano_charges
-	draw_string(ThemeDB.fallback_font, Vector2(543.0, 284.0), nano_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
-	# Identidade de capitulo e objetivo contextual substituem o rotulo de teste.
-	draw_rect(Rect2(8.0, 25.0, 329.0, 30.0), Color(0.08, 0.10, 0.16, 0.76))
-	draw_rect(Rect2(8.0, 25.0, 3.0, 30.0), Color("#d9a451"))
-	draw_string(ThemeDB.fallback_font, Vector2(17.0, 38.0), "PROLOGO  /  CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f5d6a0"))
-	var objective := "EMPURRE A CAIXA PARA ABRIR A GRADE"
+func _draw_controls() -> void:
+	# Visual aprovado: joystick translucido e acoes circulares. Areas de toque
+	# originais mantidas, inclusive MARRETA, CORNETA, NANO e PULO.
+	if joystick_touch_id != -1:
+		draw_circle(joystick_origin, JOYSTICK_RADIUS + 3.0, Color(0.08, 0.10, 0.17, 0.43))
+		draw_arc(joystick_origin, JOYSTICK_RADIUS, 0.0, TAU, 42, Color(0.91, 0.82, 0.70, 0.46), 2.0)
+		var knob := joystick_origin + joystick_offset
+		draw_circle(knob, 23.0, Color(0.20, 0.26, 0.37, 0.78))
+		draw_arc(knob, 23.0, 0.0, TAU, 28, Color(0.80, 0.81, 0.86, 0.68), 2.0)
+		draw_circle(knob, 7.0, Color("#e9d8b6"))
+		for i in range(4):
+			var angle: float = float(i) * PI * 0.5
+			var dir := Vector2(cos(angle), sin(angle))
+			var point: Vector2 = joystick_origin + dir * 38.0
+			draw_line(point - dir * 5.0, point, Color(0.92, 0.89, 0.81, 0.65), 2.0)
+
+	_draw_control_medallion(Vector2(376.0, 329.0), 23.0, "MART", hammer_unlocked, Color("#dba268"), 12)
+	_draw_control_medallion(Vector2(479.0, 329.0), 23.0, "COR", horn_unlocked and horn_charges > 0, Color("#91c7d7"), 12)
+	_draw_control_medallion(Vector2(580.0, 329.0), 25.0, "PULO", true, Color("#cfd2e0"), 14)
+	var nano_label := "%ds" % int(ceil(nano_remaining)) if _nano_active() else "NANO"
+	_draw_control_medallion(Vector2(580.0, 279.0), 17.0, nano_label, nano_unlocked and (nano_charges > 0 or _nano_active()), Color("#a4d2ac"), 10)
+	if horn_charges > 0:
+		draw_string(ThemeDB.fallback_font, Vector2(468.0, 299.0), "x%d" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e6dee1"))
+	if nano_charges > 0 and not _nano_active():
+		draw_string(ThemeDB.fallback_font, Vector2(611.0, 284.0), "%d" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#c5e8c6"))
+	# Barra superior fixa na tela; no estilo da imagem de referencia.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 48.0), Color(0.08, 0.07, 0.13, 0.94))
+	draw_rect(Rect2(0.0, 45.0, 640.0, 3.0), Color("#6f4a57"))
+	draw_rect(Rect2(129.0, 4.0, 2.0, 39.0), Color("#80616d"))
+	draw_rect(Rect2(357.0, 4.0, 2.0, 39.0), Color("#80616d"))
+	draw_rect(Rect2(429.0, 4.0, 2.0, 39.0), Color("#80616d"))
+	draw_rect(Rect2(509.0, 4.0, 2.0, 39.0), Color("#80616d"))
+	draw_string(ThemeDB.fallback_font, Vector2(11.0, 21.0), "CHAPOLIN", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#ffcc79"))
+	draw_string(ThemeDB.fallback_font, Vector2(25.0, 37.0), "ADVENTURES", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e58a58"))
+	draw_circle(Vector2(114.0, 23.0), 11.0, Color("#e1a235"))
+	draw_string(ThemeDB.fallback_font, Vector2(106.0, 27.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9b3737"))
+	draw_string(ThemeDB.fallback_font, Vector2(140.0, 19.0), "PROLOGO - CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5e1c4"))
+	var objective := "EMPURRE A CAIXA E ABRA A GRADE"
 	if puzzle_gate_open and not checkpoint_active:
-		objective = "SIGA ATE O PONTO DE APOIO"
+		objective = "SIGA ATE O CHECKPOINT"
 	elif checkpoint_active and (lever_states.is_empty() or not lever_states[0]):
-		objective = "ENCONTRE A PRIMEIRA ALAVANCA"
+		objective = "ENCONTRE A ALAVANCA"
 	elif lever_states.size() > 1 and not lever_states[1]:
 		objective = "LIGUE A PLATAFORMA FINAL"
 	elif lever_states.size() > 1 and lever_states[1]:
-		objective = "ENCONTRE A MORADORA E A SAIDA"
+		objective = "RESGATE A MORADORA"
 	if stage_complete:
-		objective = "RESGATE REALIZADO"
-	draw_string(ThemeDB.fallback_font, Vector2(17.0, 51.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d1beac"))
-	draw_string(ThemeDB.fallback_font, Vector2(504.0, 26.0), "CH %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f6d47b"))
-	if checkpoint_active:
-		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
-	draw_string(ThemeDB.fallback_font, Vector2(504.0, 65.0), "ROBOS %d/%d" % [enemy_active.size() - enemy_active.count(false), enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e0bf9c"))
-	draw_string(ThemeDB.fallback_font, Vector2(397.0, 82.0), "SECRETOS %d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f3dca7"))
+		objective = "RESGATE CONCLUIDO"
+	draw_string(ThemeDB.fallback_font, Vector2(141.0, 36.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ddcfb3"))
 	_draw_health_hud()
+	draw_circle(Vector2(526.0, 21.0), 11.0, Color("#b48335"))
+	draw_circle(Vector2(526.0, 21.0), 8.0, Color("#efd18a"))
+	draw_string(ThemeDB.fallback_font, Vector2(518.0, 25.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#724146"))
+	draw_string(ThemeDB.fallback_font, Vector2(543.0, 27.0), "%02d" % medal_count, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#ffe6a4"))
+	draw_string(ThemeDB.fallback_font, Vector2(575.0, 27.0), "SEG %d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d8c1a4"))
 	if ledge_hanging:
-		draw_string(ThemeDB.fallback_font, Vector2(181.0, 79.0), "BORDA: CIMA SOBE | BAIXO SOLTA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
+		draw_rect(Rect2(174.0, 67.0, 270.0, 22.0), Color(0.10, 0.08, 0.16, 0.78))
+		draw_string(ThemeDB.fallback_font, Vector2(185.0, 82.0), "CIMA SOBE  |  BAIXO SOLTA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
 	var lever_index: int = _nearby_lever_index()
 	if lever_index >= 0 and not pause_menu_open and not stage_complete and not game_over:
-		draw_rect(Rect2(535.0, 211.0, 90.0, 38.0), Color("#8b7448"))
-		draw_rect(Rect2(539.0, 215.0, 82.0, 30.0), Color("#544a3d"))
-		draw_string(ThemeDB.fallback_font, Vector2(547.0, 237.0), "ACIONAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f7e4c1"))
+		_draw_control_medallion(Vector2(580.0, 230.0), 23.0, "ACAO", true, Color("#e1b56c"), 13)
 	if not stage_complete and not game_over:
-		draw_rect(Rect2(551.0, 89.0, 76.0, 29.0), Color("#304052"))
-		draw_string(ThemeDB.fallback_font, Vector2(559.0, 108.0), "PAUSA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f0dbc4"))
+		draw_rect(Rect2(551.0, 89.0, 76.0, 29.0), Color(0.13, 0.14, 0.23, 0.78))
+		draw_string(ThemeDB.fallback_font, Vector2(560.0, 108.0), "PAUSA", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f0dbc4"))
 	if save_notice_time > 0.0 and not pause_menu_open:
-		draw_string(ThemeDB.fallback_font, Vector2(552.0, 141.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a8d6ae"))
+		draw_string(ThemeDB.fallback_font, Vector2(559.0, 141.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a8d6ae"))
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
