@@ -603,7 +603,7 @@ func _draw_controls() -> void:
 func _input(event: InputEvent) -> void:
 	# Cada dedo possui um ID. Um dedo movimenta, o outro pode pular.
 	if event is InputEventScreenTouch:
-		var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * event.position
+		var screen_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
 		if event.pressed:
 			if joystick_touch_id < 0 and screen_pos.x <= 320.0 and screen_pos.y >= 140.0 and screen_pos.y <= 360.0:
 				joystick_touch_id = event.index
@@ -615,7 +615,7 @@ func _input(event: InputEvent) -> void:
 		elif event.index == joystick_touch_id:
 			_release_joystick()
 	elif event is InputEventScreenDrag and event.index == joystick_touch_id:
-		var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * event.position
+		var screen_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
 		joystick_offset = (screen_pos - joystick_origin).limit_length(JOYSTICK_RADIUS)
 		_update_joystick_axes()
 
