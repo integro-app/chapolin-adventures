@@ -105,3 +105,12 @@ static func moving_obstacles() -> Array[Vector3]:
 		Vector3(1140.0, 1205.0, 300.0),
 		Vector3(1980.0, 2045.0, 300.0)
 	]
+
+# Itens de combate: z=1 marreta, z=2 corneta, z=3 recarga de corneta.
+# Coleta automatica. Posicoes acessiveis no inicio e apos o checkpoint.
+static func combat_pickups() -> Array[Vector3]:
+	return [
+		Vector3(154.0, 270.0, 1.0),
+		Vector3(365.0, 222.0, 2.0),
+		Vector3(1730.0, 270.0, 3.0)
+	]
