@@ -16,8 +16,8 @@ const STAND_HEIGHT := 101.0
 const CROUCH_HEIGHT := 83.0
 const CROUCH_SPEED := 92.0
 const CLIMB_SPEED := 90.0
-const DPAD_CENTER := Vector2(90.0, 297.0)
-const DPAD_RADIUS := 67.0
+const JOYSTICK_RADIUS := 51.0
+const JOYSTICK_DEADZONE := 13.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -32,7 +32,9 @@ var climbing := false
 var climb_ladder := Rect2()
 var crouch_held := false
 var is_crouching := false
-var touch_controls: Dictionary = {}
+var joystick_touch_id := -1
+var joystick_origin := Vector2.ZERO
+var joystick_offset := Vector2.ZERO
 var jump_requested := false
 var facing := 1
 var animation_time := 0.0
@@ -582,90 +584,62 @@ func _draw_chapolin() -> void:
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_controls() -> void:
-	# Direcional unico de quatro sentidos: os comandos nao mudam perto da escada.
-	# O desenho nao mexe no enquadramento do jogo ou nas artes do heroi.
-	draw_circle(DPAD_CENTER, DPAD_RADIUS, Color(0.08, 0.13, 0.19, 0.76))
-	var up_color := Color("#64795e") if climb_up_held else Color("#304354")
-	var down_color := Color("#64795e") if climb_down_held else Color("#304354")
-	var left_color := Color("#64795e") if move_axis < -0.1 else Color("#304354")
-	var right_color := Color("#64795e") if move_axis > 0.1 else Color("#304354")
-	draw_rect(Rect2(73.0, 244.0, 34.0, 35.0), up_color)
-	draw_rect(Rect2(73.0, 315.0, 34.0, 35.0), down_color)
-	draw_rect(Rect2(35.0, 279.0, 38.0, 36.0), left_color)
-	draw_rect(Rect2(107.0, 279.0, 38.0, 36.0), right_color)
-	draw_rect(Rect2(73.0, 279.0, 34.0, 36.0), Color("#283b4a"))
+	# O joystick so aparece enquanto um dedo toca a metade esquerda da tela.
+	# Diagonal para baixo + lateral = caminhar agachado, sem botao dedicado.
+	if joystick_touch_id >= 0:
+		draw_circle(joystick_origin, JOYSTICK_RADIUS, Color(0.06, 0.12, 0.17, 0.38))
+		draw_arc(joystick_origin, JOYSTICK_RADIUS, 0.0, TAU, 36, Color(0.92, 0.79, 0.62, 0.48), 2.0)
+		draw_circle(joystick_origin, 8.0, Color(0.81, 0.71, 0.59, 0.44))
+		var knob := joystick_origin + joystick_offset
+		draw_circle(knob, 23.0, Color(0.12, 0.23, 0.30, 0.86))
+		draw_circle(knob, 18.0, Color(0.42, 0.53, 0.53, 0.88))
+		draw_circle(knob, 8.0, Color("#f1d9b5"))
 
-	# Setas vetoriais para nao depender de caracteres especiais ou fontes.
-	var arrow_color := Color("#f1d9b5")
-	draw_colored_polygon(PackedVector2Array([Vector2(90.0, 250.0), Vector2(80.0, 266.0), Vector2(100.0, 266.0)]), arrow_color)
-	draw_colored_polygon(PackedVector2Array([Vector2(90.0, 344.0), Vector2(80.0, 328.0), Vector2(100.0, 328.0)]), arrow_color)
-	draw_colored_polygon(PackedVector2Array([Vector2(42.0, 297.0), Vector2(60.0, 288.0), Vector2(60.0, 306.0)]), arrow_color)
-	draw_colored_polygon(PackedVector2Array([Vector2(138.0, 297.0), Vector2(120.0, 288.0), Vector2(120.0, 306.0)]), arrow_color)
-	draw_circle(DPAD_CENTER, 8.0, Color("#d4b38b"))
-
-	# Acoes separadas a direita, preservando agachamento e pulo.
-	draw_rect(Rect2(414.0, 310.0, 110.0, 38.0), Color("#465344") if is_crouching else Color("#263c53"))
+	# Pulo permanece separado para uso com outro dedo.
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
-	draw_string(ThemeDB.fallback_font, Vector2(423.0, 334.0), "AGACHAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
 
 func _input(event: InputEvent) -> void:
-	# Finger IDs keep simultaneous move+crouch and move+jump independent.
+	# Cada dedo possui um ID. Um dedo movimenta, o outro pode pular.
 	if event is InputEventScreenTouch:
+		var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * event.position
 		if event.pressed:
-			var action := _control_at(event.position)
-			touch_controls[event.index] = action
-			if action == "jump":
+			if joystick_touch_id < 0 and screen_pos.x <= 320.0 and screen_pos.y >= 140.0 and screen_pos.y <= 360.0:
+				joystick_touch_id = event.index
+				joystick_origin = screen_pos
+				joystick_offset = Vector2.ZERO
+				_update_joystick_axes()
+			elif screen_pos.x >= 535.0 and screen_pos.x <= 640.0 and screen_pos.y >= 295.0 and screen_pos.y <= 360.0:
 				jump_requested = true
-		else:
-			touch_controls.erase(event.index)
-		_sync_touch_controls()
-	elif event is InputEventScreenDrag:
-		if touch_controls.has(event.index):
-			var action := _control_at(event.position)
-			var previous: String = str(touch_controls[event.index])
-			if action == "jump" and previous != "jump":
-				jump_requested = true
-			touch_controls[event.index] = action
-			_sync_touch_controls()
+		elif event.index == joystick_touch_id:
+			_release_joystick()
+	elif event is InputEventScreenDrag and event.index == joystick_touch_id:
+		var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * event.position
+		joystick_offset = (screen_pos - joystick_origin).limit_length(JOYSTICK_RADIUS)
+		_update_joystick_axes()
 
-func _control_at(pos: Vector2) -> String:
-	var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * pos
-	# O polegar pode arrastar de uma direcao para outra sem levantar.
-	# Cima/baixo sempre sao detectados; so controlam escadas se houver proximidade.
-	if screen_pos.x >= 20.0 and screen_pos.x <= 160.0 and screen_pos.y >= 231.0 and screen_pos.y <= 359.0:
-		var offset := screen_pos - DPAD_CENTER
-		if offset.length() < 16.0 or offset.length() > DPAD_RADIUS + 6.0:
-			return ""
-		if absf(offset.x) > absf(offset.y):
-			return "right" if offset.x > 0.0 else "left"
-		return "down" if offset.y > 0.0 else "up"
-	if screen_pos.y >= 295.0 and screen_pos.y <= 360.0:
-		if screen_pos.x >= 414.0 and screen_pos.x < 525.0:
-			return "crouch"
-		if screen_pos.x >= 535.0 and screen_pos.x <= 640.0:
-			return "jump"
-	return ""
+func _update_joystick_axes() -> void:
+	var horizontal := joystick_offset.x
+	var vertical := joystick_offset.y
+	# Mantem um setor amplo para as diagonais baixo/esquerda e baixo/direita.
+	if absf(horizontal) > JOYSTICK_DEADZONE and absf(horizontal) > absf(vertical) * 0.38:
+		move_axis = 1.0 if horizontal > 0.0 else -1.0
+	else:
+		move_axis = 0.0
+	# Somente um gesto essencialmente vertical aciona a escada.
+	var on_vertical_axis := absf(vertical) > JOYSTICK_DEADZONE and absf(horizontal) <= absf(vertical) * 0.55
+	climb_up_held = on_vertical_axis and vertical < 0.0
+	climb_down_held = on_vertical_axis and vertical > 0.0
+	# Para baixo parado = agachar; diagonal = andar agachado.
+	# Quando uma escada esta ativa, _handle_ladder tem prioridade.
+	crouch_held = vertical > JOYSTICK_DEADZONE
 
-func _sync_touch_controls() -> void:
-	var left_pressed := false
-	var right_pressed := false
-	var duck_pressed := false
-	var up_pressed := false
-	var down_pressed := false
-	for button in touch_controls.values():
-		if button == "left":
-			left_pressed = true
-		elif button == "right":
-			right_pressed = true
-		elif button == "crouch":
-			duck_pressed = true
-		elif button == "up":
-			up_pressed = true
-		elif button == "down":
-			down_pressed = true
-	move_axis = (1.0 if right_pressed else 0.0) - (1.0 if left_pressed else 0.0)
-	crouch_held = duck_pressed
-	climb_up_held = up_pressed
-	climb_down_held = down_pressed
+func _release_joystick() -> void:
+	joystick_touch_id = -1
+	joystick_origin = Vector2.ZERO
+	joystick_offset = Vector2.ZERO
+	move_axis = 0.0
+	climb_up_held = false
+	climb_down_held = false
+	crouch_held = false
