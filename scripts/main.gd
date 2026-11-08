@@ -1,37 +1,38 @@
 extends Node2D
 
-# Preserves the movement/jump prototype and replaces only the temporary drawing.
 const SPEED := 190.0
 const JUMP_SPEED := -350.0
 const GRAVITY := 900.0
 const FLOOR_Y := 300.0
-const IDLE_FPS := 1000.0 / 230.0
-const IDLE_FRAME_COUNT := 8
-const FRAME_SIZE := Vector2(54.0, 101.0)
+const FRAME_SIZE := Vector2(48.0, 90.0)
+const IDLE_FPS := 4.35
+const WALK_FPS := 8.3
 
 var hero_pos := Vector2(120.0, FLOOR_Y)
 var vertical_speed := 0.0
 var move_axis := 0.0
 var jump_requested := false
-var facing := 1.0
-var idle_time := 0.0
-var idle_frame := 0
+var facing := 1
+var animation_time := 0.0
+var current_animation := "idle"
 var idle_texture: Texture2D
+var walk_texture: Texture2D
 
 func _ready() -> void:
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	idle_texture = load("res://assets/chapolin_idle.png") as Texture2D
+	# Texture assets contain 8 transparent, aligned 48x90 frames.
+	if ResourceLoader.exists("res://assets/chapolin/idle.png"):
+		idle_texture = load("res://assets/chapolin/idle.png")
+	if ResourceLoader.exists("res://assets/chapolin/walk.png"):
+		walk_texture = load("res://assets/chapolin/walk.png")
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
 		axis = move_axis
-	if axis > 0.1:
-		facing = 1.0
-	elif axis < -0.1:
-		facing = -1.0
-	hero_pos.x = clampf(hero_pos.x + axis * SPEED * delta, 27.0, 613.0)
+	if axis != 0.0:
+		facing = 1 if axis > 0.0 else -1
+	hero_pos.x = clampf(hero_pos.x + axis * SPEED * delta, 24.0, 616.0)
 	if (Input.is_action_just_pressed("ui_accept") or jump_requested) and hero_pos.y >= FLOOR_Y:
 		vertical_speed = JUMP_SPEED
 	jump_requested = false
@@ -39,27 +40,31 @@ func _physics_process(delta: float) -> void:
 	hero_pos.y = minf(hero_pos.y + vertical_speed * delta, FLOOR_Y)
 	if hero_pos.y >= FLOOR_Y:
 		vertical_speed = 0.0
-	# Breathing and antenna motion use the eight approved GIF frames.
-	if absf(axis) < 0.1 and hero_pos.y >= FLOOR_Y:
-		idle_time += delta
-		idle_frame = int(idle_time * IDLE_FPS) % IDLE_FRAME_COUNT
+	var desired := "walk" if absf(axis) > 0.1 and hero_pos.y >= FLOOR_Y else "idle"
+	if desired != current_animation:
+		current_animation = desired
+		animation_time = 0.0
 	else:
-		idle_time = 0.0
-		idle_frame = 0
+		animation_time += delta
 	queue_redraw()
 
 func _draw() -> void:
 	draw_rect(Rect2(0, 0, 640, 360), Color("#13263d"))
 	draw_rect(Rect2(0, 300, 640, 60), Color("#4b6a49"))
-	if idle_texture != null:
-		draw_set_transform(hero_pos, 0.0, Vector2(facing, 1.0))
-		draw_texture_rect_region(
-			idle_texture,
-			Rect2(-FRAME_SIZE.x / 2.0, -FRAME_SIZE.y, FRAME_SIZE.x, FRAME_SIZE.y),
-			Rect2(float(idle_frame) * FRAME_SIZE.x, 0.0, FRAME_SIZE.x, FRAME_SIZE.y)
-		)
-		draw_set_transform(Vector2.ZERO)
-	# Keep the touchscreen controls from the already validated prototype.
+	var sprite: Texture2D = walk_texture if current_animation == "walk" and walk_texture != null else idle_texture
+	if sprite == null:
+		# Safe fallback until the approved sprite assets are available.
+		draw_rect(Rect2(hero_pos.x - 10, hero_pos.y - 45, 20, 45), Color("#b32835"))
+		draw_circle(Vector2(hero_pos.x, hero_pos.y - 55), 11, Color("#b32835"))
+	else:
+		var fps := WALK_FPS if current_animation == "walk" and walk_texture != null else IDLE_FPS
+		var frame := int(floor(animation_time * fps)) % 8
+		var region := Rect2(float(frame) * FRAME_SIZE.x, 0.0, FRAME_SIZE.x, FRAME_SIZE.y)
+		var dest := Rect2(-FRAME_SIZE.x / 2.0, -FRAME_SIZE.y, FRAME_SIZE.x, FRAME_SIZE.y)
+		draw_set_transform(hero_pos, 0.0, Vector2(float(facing), 1.0))
+		draw_texture_rect_region(sprite, dest, region)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# Preserve mobile controls and positions.
 	draw_rect(Rect2(15, 310, 90, 38), Color("#263c53"))
 	draw_rect(Rect2(112, 310, 90, 38), Color("#263c53"))
 	draw_rect(Rect2(535, 310, 90, 38), Color("#263c53"))
