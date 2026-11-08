@@ -114,3 +114,16 @@ static func combat_pickups() -> Array[Vector3]:
 		Vector3(365.0, 222.0, 2.0),
 		Vector3(1730.0, 270.0, 3.0)
 	]
+
+# Nanicolina: pequena capsula coletada antes do tunel de papelão.
+static func nano_pickups() -> Array[Vector2]:
+	return [
+		Vector2(1250.0, 270.0)
+	]
+
+# Telhado baixo sobre o piso: so o Chapolin miniatura atravessa por baixo.
+# Fica antes do checkpoint (x=1435), preservando respawn em area aberta.
+static func nano_tunnels() -> Array[Rect2]:
+	return [
+		Rect2(1342.0, 244.0, 68.0, 20.0)
+	]
