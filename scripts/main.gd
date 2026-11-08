@@ -4,7 +4,6 @@ const SPEED := 190.0
 const JUMP_SPEED := -350.0
 const GRAVITY := 900.0
 const FLOOR_Y := 300.0
-const FRAME_SIZE := Vector2(48.0, 90.0)
 const IDLE_FPS := 4.35
 const WALK_FPS := 8.3
 
@@ -19,9 +18,9 @@ var idle_texture: Texture2D
 var walk_texture: Texture2D
 
 func _ready() -> void:
-	# Texture assets contain 8 transparent, aligned 48x90 frames.
-	if ResourceLoader.exists("res://assets/chapolin/idle.png"):
-		idle_texture = load("res://assets/chapolin/idle.png")
+	# Each texture contains eight transparent frames. Size comes from its file.
+	if ResourceLoader.exists("res://assets/chapolin_idle.png"):
+		idle_texture = load("res://assets/chapolin_idle.png")
 	if ResourceLoader.exists("res://assets/chapolin/walk.png"):
 		walk_texture = load("res://assets/chapolin/walk.png")
 	queue_redraw()
@@ -59,8 +58,9 @@ func _draw() -> void:
 	else:
 		var fps := WALK_FPS if current_animation == "walk" and walk_texture != null else IDLE_FPS
 		var frame := int(floor(animation_time * fps)) % 8
-		var region := Rect2(float(frame) * FRAME_SIZE.x, 0.0, FRAME_SIZE.x, FRAME_SIZE.y)
-		var dest := Rect2(-FRAME_SIZE.x / 2.0, -FRAME_SIZE.y, FRAME_SIZE.x, FRAME_SIZE.y)
+		var frame_size := Vector2(float(sprite.get_width()) / 8.0, float(sprite.get_height()))
+		var region := Rect2(float(frame) * frame_size.x, 0.0, frame_size.x, frame_size.y)
+		var dest := Rect2(-frame_size.x / 2.0, -frame_size.y, frame_size.x, frame_size.y)
 		draw_set_transform(hero_pos, 0.0, Vector2(float(facing), 1.0))
 		draw_texture_rect_region(sprite, dest, region)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
