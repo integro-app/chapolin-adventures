@@ -1300,7 +1300,8 @@ func _draw() -> void:
 	for surface in raised_platforms:
 		_draw_stone(surface, false)
 	for i in range(moving_platform_rects.size()):
-		_draw_moving_platform(moving_platform_rects[i], moving_platform_specs[i])
+		var powered: bool = i == 0 or (lever_states.size() > 1 and lever_states[1])
+		_draw_moving_platform(moving_platform_rects[i], moving_platform_specs[i], powered)
 	_draw_ledge_grab_markers()
 	for plate in pressure_plates:
 		_draw_pressure_plate(plate)
@@ -1841,7 +1842,7 @@ func _draw_lever_gate() -> void:
 			draw_line(Vector2(gate.position.x + 1.0, y), Vector2(gate.end.x - 1.0, y), Color("#e3bf8c"), 3.0)
 		draw_string(ThemeDB.fallback_font, Vector2(gate.position.x - 13.0, gate.position.y - 13.0), "OFF", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e6a879"))
 
-func _draw_moving_platform(platform: Rect2, spec: Dictionary) -> void:
+func _draw_moving_platform(platform: Rect2, spec: Dictionary, powered: bool) -> void:
 	# Trilho de estúdio com uma plataforma deslizante de madeira e ferro.
 	var min_center: float = float(spec["min_x"]) + platform.size.x * 0.5
 	var max_center: float = float(spec["max_x"]) + platform.size.x * 0.5
@@ -1856,6 +1857,10 @@ func _draw_moving_platform(platform: Rect2, spec: Dictionary) -> void:
 	for i in range(3):
 		var bolt_x: float = platform.position.x + 10.0 + float(i) * (platform.size.x - 20.0) / 2.0
 		draw_circle(Vector2(bolt_x, platform.position.y + 8.0), 1.5, Color("#564449"))
+	# Luz informa de imediato se a plataforma esta ligada ou aguardando alavanca.
+	draw_circle(Vector2(center_x, rail_y), 5.0, Color("#7ac88f") if powered else Color("#c77b68"))
+	if not powered:
+		draw_string(ThemeDB.fallback_font, Vector2(center_x - 12.0, rail_y - 12.0), "OFF", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e4ac91"))
 
 func _draw_ledge_grab_markers() -> void:
 	# Pequenas marcacoes douradas mostram em quais cantos e possivel agarrar.
