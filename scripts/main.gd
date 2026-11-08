@@ -16,6 +16,9 @@ var animation_time := 0.0
 var current_animation := "idle"
 var idle_texture: Texture2D
 var walk_texture: Texture2D
+var jump_texture: Texture2D
+var air_time := 0.0
+var landing_timer := 0.0
 
 func _ready() -> void:
 	# Each texture contains eight transparent frames. Size comes from its file.
@@ -23,6 +26,8 @@ func _ready() -> void:
 		idle_texture = load("res://assets/chapolin_idle.png")
 	if ResourceLoader.exists("res://assets/chapolin/walk.png"):
 		walk_texture = load("res://assets/chapolin/walk.png")
+	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
+		jump_texture = load("res://assets/chapolin/jump.png")
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
@@ -32,14 +37,34 @@ func _physics_process(delta: float) -> void:
 	if axis != 0.0:
 		facing = 1 if axis > 0.0 else -1
 	hero_pos.x = clampf(hero_pos.x + axis * SPEED * delta, 24.0, 616.0)
-	if (Input.is_action_just_pressed("ui_accept") or jump_requested) and hero_pos.y >= FLOOR_Y:
+
+	var was_airborne := hero_pos.y < FLOOR_Y
+	if (Input.is_action_just_pressed("ui_accept") or jump_requested) and not was_airborne:
 		vertical_speed = JUMP_SPEED
+		air_time = 0.0
+		landing_timer = 0.0
 	jump_requested = false
+
 	vertical_speed += GRAVITY * delta
 	hero_pos.y = minf(hero_pos.y + vertical_speed * delta, FLOOR_Y)
-	if hero_pos.y >= FLOOR_Y:
+	var is_airborne := hero_pos.y < FLOOR_Y
+	if is_airborne:
+		air_time += delta
+	else:
 		vertical_speed = 0.0
-	var desired := "walk" if absf(axis) > 0.1 and hero_pos.y >= FLOOR_Y else "idle"
+		if was_airborne:
+			landing_timer = 0.16
+		else:
+			landing_timer = maxf(0.0, landing_timer - delta)
+
+	var desired := "idle"
+	if is_airborne and jump_texture != null:
+		desired = "jump"
+	elif landing_timer > 0.0 and jump_texture != null:
+		desired = "land"
+	elif absf(axis) > 0.1:
+		desired = "walk"
+
 	if desired != current_animation:
 		current_animation = desired
 		animation_time = 0.0
@@ -50,14 +75,34 @@ func _physics_process(delta: float) -> void:
 func _draw() -> void:
 	draw_rect(Rect2(0, 0, 640, 360), Color("#13263d"))
 	draw_rect(Rect2(0, 300, 640, 60), Color("#4b6a49"))
-	var sprite: Texture2D = walk_texture if current_animation == "walk" and walk_texture != null else idle_texture
+	var sprite: Texture2D = idle_texture
+	if current_animation == "walk" and walk_texture != null:
+		sprite = walk_texture
+	elif (current_animation == "jump" or current_animation == "land") and jump_texture != null:
+		sprite = jump_texture
 	if sprite == null:
 		# Safe fallback until the approved sprite assets are available.
 		draw_rect(Rect2(hero_pos.x - 10, hero_pos.y - 45, 20, 45), Color("#b32835"))
 		draw_circle(Vector2(hero_pos.x, hero_pos.y - 55), 11, Color("#b32835"))
 	else:
-		var fps := WALK_FPS if current_animation == "walk" and walk_texture != null else IDLE_FPS
-		var frame := int(floor(animation_time * fps)) % 8
+		var frame: int = 0
+		if current_animation == "jump" and jump_texture != null:
+			# Play jump poses against the actual vertical speed, never as a repeating loop.
+			if air_time < 0.07:
+				frame = 1
+			elif vertical_speed < -180.0:
+				frame = 2
+			elif vertical_speed < -50.0:
+				frame = 3
+			elif vertical_speed < 80.0:
+				frame = 4
+			else:
+				frame = 5
+		elif current_animation == "land" and jump_texture != null:
+			frame = 6 if landing_timer > 0.08 else 7
+		else:
+			var fps := WALK_FPS if current_animation == "walk" and walk_texture != null else IDLE_FPS
+			frame = int(floor(animation_time * fps)) % 8
 		var frame_size := Vector2(float(sprite.get_width()) / 8.0, float(sprite.get_height()))
 		var region := Rect2(float(frame) * frame_size.x, 0.0, frame_size.x, frame_size.y)
 		var drawn_height := 101.0
