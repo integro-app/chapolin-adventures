@@ -25,6 +25,11 @@ const ROPE_MIN_GRIP := 12.0
 const ROPE_CLIMB_SPEED := 95.0
 const ROPE_SWING_ACCEL := 8.4
 const ROPE_MAX_ANGLE := 0.78
+const ROPE_LAUNCH_MULTIPLIER := 1.55
+const ROPE_LAUNCH_MAX_SPEED := 460.0
+const ROPE_LAUNCH_UPWARD_BOOST := 185.0
+const ROPE_AIR_MOMENTUM_DRAG := 45.0
+const ROPE_AIR_STEERING := 85.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -116,8 +121,10 @@ func _physics_process(delta: float) -> void:
 	var move_speed := CROUCH_SPEED if is_crouching else (RUN_SPEED if running else SPEED)
 	var travel := axis * move_speed * delta
 	if not grounded and absf(rope_release_vx) > 0.1:
-		travel += rope_release_vx * delta
-		rope_release_vx = move_toward(rope_release_vx, 0.0, 300.0 * delta)
+		# Preserva a velocidade do pendulo depois do salto; o joystick so faz
+		# uma correcao leve na trajetoria, em vez de apagar o impulso.
+		travel = (rope_release_vx + axis * ROPE_AIR_STEERING) * delta
+		rope_release_vx = move_toward(rope_release_vx, 0.0, ROPE_AIR_MOMENTUM_DRAG * delta)
 	elif grounded:
 		rope_release_vx = 0.0
 	hero_pos.x = _move_x_with_crates(travel)
@@ -223,12 +230,17 @@ func _handle_rope(delta: float) -> bool:
 		landing_timer = 0.0
 
 	if Input.is_action_just_pressed("ui_accept") or jump_requested:
-		# Salto com impulso tangencial; evita recaptura ate sair da area da corda.
+		# A velocidade real de soltura e tangente ao circulo descrito pela
+		# pegada. Transfere tanto o componente horizontal quanto o vertical.
+		var tangent := Vector2(cos(rope_angle), -sin(rope_angle))
+		var tangential_speed := rope_angular_velocity * rope_grip_distance
+		var launch_velocity := tangent * tangential_speed * ROPE_LAUNCH_MULTIPLIER
 		swinging = false
 		rope_blocked_anchor_x = rope_anchor.x
 		rope_regrab_delay = 0.85
-		rope_release_vx = clampf(rope_angular_velocity * rope_grip_distance * cos(rope_angle), -280.0, 280.0)
-		vertical_speed = -155.0
+		rope_release_vx = clampf(launch_velocity.x, -ROPE_LAUNCH_MAX_SPEED, ROPE_LAUNCH_MAX_SPEED)
+		# O botao PULO acrescenta impulso para cima mesmo no ponto mais baixo.
+		vertical_speed = maxf(-390.0, minf(-125.0, launch_velocity.y - ROPE_LAUNCH_UPWARD_BOOST))
 		grounded = false
 		air_time = 0.0
 		jump_requested = false
