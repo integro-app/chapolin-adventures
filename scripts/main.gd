@@ -63,6 +63,8 @@ const LEDGE_GRAB_Y_MIN := 2.0
 const LEDGE_GRAB_Y_MAX := 83.0
 const LEDGE_CLIMB_SECONDS := 0.30
 const LEDGE_RELEASE_DELAY := 0.55
+const LEVER_REACH := 43.0
+const LEVER_HEIGHT_REACH := 58.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -116,6 +118,9 @@ var crates: Array[Rect2] = []
 var pressure_plates: Array[Rect2] = []
 var puzzle_gates: Array[Rect2] = []
 var puzzle_gate_open := false
+var lever_points: Array[Vector3] = []
+var lever_states: Array[bool] = []
+var lever_gate: Rect2 = Rect2()
 var medals: Array[Vector2] = []
 var medal_collected: Array[bool] = []
 var medal_count := 0
@@ -175,6 +180,10 @@ func _ready() -> void:
 	crates = Stage.crates()
 	pressure_plates = Stage.pressure_plates()
 	puzzle_gates = Stage.puzzle_gates()
+	lever_points = Stage.levers()
+	lever_gate = Stage.lever_gate()
+	for _lever in lever_points:
+		lever_states.append(false)
 	medals = Stage.medals()
 	for _medal in medals:
 		medal_collected.append(false)
@@ -456,6 +465,8 @@ func _ledge_destination_is_clear(destination: Vector2) -> bool:
 		for gate in puzzle_gates:
 			if bounds.intersects(gate):
 				return false
+	if not _lever_gate_open() and bounds.intersects(lever_gate):
+		return false
 	return true
 
 func _try_grab_ledge() -> bool:
@@ -551,6 +562,30 @@ func _handle_ledge(delta: float) -> void:
 	facing = ledge_side
 	_update_climb_visuals(delta, "ledge")
 
+func _lever_gate_open() -> bool:
+	return lever_states.size() > 0 and lever_states[0]
+
+func _nearby_lever_index() -> int:
+	if pause_menu_open or stage_complete or game_over or ledge_hanging or ledge_climbing or swinging or climbing:
+		return -1
+	for i in range(lever_points.size()):
+		if lever_states[i]:
+			continue
+		var lever: Vector3 = lever_points[i]
+		if absf(hero_pos.x - lever.x) <= LEVER_REACH and absf(hero_pos.y - lever.y) <= LEVER_HEIGHT_REACH:
+			return i
+	return -1
+
+func _activate_nearby_lever() -> void:
+	var index: int = _nearby_lever_index()
+	if index < 0:
+		return
+	# Disparos unicos: a grade nunca fecha sobre o Chapolin e a plataforma
+	# nao desliga quando ele estiver em cima. Mantem estado no autosave.
+	lever_states[index] = true
+	_mark_save_dirty()
+	queue_redraw()
+
 func _setup_moving_platforms() -> void:
 	moving_platform_rects.clear()
 	moving_platform_directions.clear()
@@ -565,6 +600,9 @@ func _advance_moving_platforms(delta: float) -> void:
 	# Translada o Chapolin junto com a plataforma em que ele esta apoiado.
 	# Nao altera a velocidade do pulo nem exige novo botao no celular.
 	for i in range(moving_platform_rects.size()):
+		# A segunda plataforma aguarda o acionamento da alavanca.
+		if i == 1 and (lever_states.size() < 2 or not lever_states[1]):
+			continue
 		var spec: Dictionary = moving_platform_specs[i]
 		var platform: Rect2 = moving_platform_rects[i]
 		var carried: bool = grounded and _on_surface(hero_pos.x, hero_pos.y, platform)
@@ -724,6 +762,8 @@ func _try_push_crate(crate_index: int, delta_x: float) -> bool:
 		for gate in puzzle_gates:
 			if next_block.intersects(gate):
 				return false
+	if not _lever_gate_open() and next_block.intersects(lever_gate):
+		return false
 	crates[crate_index] = next_block
 	_mark_save_dirty()
 	if _is_plate_pressed():
@@ -758,7 +798,14 @@ func _move_x_with_crates(distance: float) -> float:
 		elif distance < 0.0 and hero_pos.x - half_width >= beam.end.x and next_x - half_width < beam.end.x:
 			next_x = beam.end.x + half_width
 
-	# A grade e solida ate a caixa ativar a placa de pressao.
+	# As grades dos dois desafios tem condicoes independentes.
+	if not _lever_gate_open() and head_y < lever_gate.end.y and hero_pos.y > lever_gate.position.y:
+		if distance > 0.0 and hero_pos.x + half_width <= lever_gate.position.x and next_x + half_width > lever_gate.position.x:
+			next_x = lever_gate.position.x - half_width
+		elif distance < 0.0 and hero_pos.x - half_width >= lever_gate.end.x and next_x - half_width < lever_gate.end.x:
+			next_x = lever_gate.end.x + half_width
+
+	# A primeira grade ainda depende da caixa sobre a placa de pressao.
 	if not puzzle_gate_open:
 		for gate in puzzle_gates:
 			if head_y >= gate.end.y or hero_pos.y <= gate.position.y:
@@ -1024,6 +1071,7 @@ func _save_game() -> void:
 		"combat_pickups": _pack_flags(pickup_collected),
 		"nano_pickups": _pack_flags(nano_pickup_collected),
 		"enemy_active": _pack_flags(enemy_active),
+		"lever_states": _pack_flags(lever_states),
 		"health": health,
 		"lives": lives,
 		"hammer_unlocked": hammer_unlocked,
@@ -1093,6 +1141,7 @@ func _load_game() -> void:
 	_load_flags(data, "combat_pickups", pickup_collected)
 	_load_flags(data, "nano_pickups", nano_pickup_collected)
 	_load_flags(data, "enemy_active", enemy_active)
+	_load_flags(data, "lever_states", lever_states)
 
 	medal_count = medal_collected.count(true)
 	health = clampi(int(data.get("health", MAX_HEALTH)), 1, MAX_HEALTH)
@@ -1170,6 +1219,8 @@ func _restart_stage() -> void:
 	for i in range(pickup_collected.size()):
 		pickup_collected[i] = false
 	puzzle_gate_open = false
+	for i in range(lever_states.size()):
+		lever_states[i] = false
 	crates = Stage.crates()
 	checkpoint_active = false
 	respawn_point = Stage.RESPAWN
@@ -1255,6 +1306,9 @@ func _draw() -> void:
 		_draw_pressure_plate(plate)
 	for gate in puzzle_gates:
 		_draw_puzzle_gate(gate)
+	_draw_lever_gate()
+	for lever_index in range(lever_points.size()):
+		_draw_lever(lever_index)
 	for block in crates:
 		_draw_crate(block)
 	for beam in low_beams:
@@ -1755,6 +1809,38 @@ func _draw_pause_inventory() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(177.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(357.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 
+func _draw_lever(index: int) -> void:
+	var lever: Vector3 = lever_points[index]
+	var base := Vector2(lever.x, lever.y)
+	var activated: bool = lever_states[index]
+	# Pedestal de metal da cenografia e cabo colorido.
+	draw_rect(Rect2(base.x - 12.0, base.y - 6.0, 24.0, 6.0), Color("#49353b"))
+	draw_rect(Rect2(base.x - 8.0, base.y - 27.0, 16.0, 22.0), Color("#776269"))
+	draw_rect(Rect2(base.x - 5.0, base.y - 24.0, 10.0, 15.0), Color("#b2a29b"))
+	var handle_direction: float = 1.0 if activated else -1.0
+	draw_line(base + Vector2(0.0, -24.0), base + Vector2(handle_direction * 14.0, -43.0), Color("#c2a58a"), 4.0)
+	draw_circle(base + Vector2(handle_direction * 14.0, -43.0), 6.0, Color("#70ba7c") if activated else Color("#e3a960"))
+	var name: String = "GRADE" if index == 0 else "PLATAFORMA"
+	draw_string(ThemeDB.fallback_font, base + Vector2(-27.0, -53.0), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e9d1ad"))
+	var status_color := Color("#7fc38d") if activated else Color("#d6aa75")
+	draw_circle(base + Vector2(0.0, -16.0), 3.0, status_color)
+
+func _draw_lever_gate() -> void:
+	var gate: Rect2 = lever_gate
+	var opened: bool = _lever_gate_open()
+	# Estrutura permanece visivel mesmo apos abrir.
+	draw_rect(Rect2(gate.position.x - 4.0, gate.position.y - 5.0, gate.size.x + 8.0, gate.size.y + 5.0), Color("#493a42"), false, 3.0)
+	if opened:
+		draw_rect(Rect2(gate.position.x + 4.0, gate.position.y - 4.0, gate.size.x - 8.0, 6.0), Color("#82be92"))
+		draw_string(ThemeDB.fallback_font, Vector2(gate.position.x - 13.0, gate.position.y - 13.0), "ON", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9cd7a4"))
+	else:
+		draw_rect(gate, Color("#534850"))
+		draw_rect(Rect2(gate.position.x + 4.0, gate.position.y, gate.size.x - 8.0, gate.size.y), Color("#b27f60"))
+		for i in range(6):
+			var y: float = gate.position.y + 15.0 + float(i) * 24.0
+			draw_line(Vector2(gate.position.x + 1.0, y), Vector2(gate.end.x - 1.0, y), Color("#e3bf8c"), 3.0)
+		draw_string(ThemeDB.fallback_font, Vector2(gate.position.x - 13.0, gate.position.y - 13.0), "OFF", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e6a879"))
+
 func _draw_moving_platform(platform: Rect2, spec: Dictionary) -> void:
 	# Trilho de estúdio com uma plataforma deslizante de madeira e ferro.
 	var min_center: float = float(spec["min_x"]) + platform.size.x * 0.5
@@ -1850,6 +1936,11 @@ func _draw_controls() -> void:
 	_draw_health_hud()
 	if ledge_hanging:
 		draw_string(ThemeDB.fallback_font, Vector2(181.0, 79.0), "BORDA: CIMA SOBE | BAIXO SOLTA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
+	var lever_index: int = _nearby_lever_index()
+	if lever_index >= 0 and not pause_menu_open and not stage_complete and not game_over:
+		draw_rect(Rect2(535.0, 211.0, 90.0, 38.0), Color("#8b7448"))
+		draw_rect(Rect2(539.0, 215.0, 82.0, 30.0), Color("#544a3d"))
+		draw_string(ThemeDB.fallback_font, Vector2(547.0, 237.0), "ACIONAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f7e4c1"))
 	if not stage_complete and not game_over:
 		draw_rect(Rect2(551.0, 89.0, 76.0, 29.0), Color("#304052"))
 		draw_string(ThemeDB.fallback_font, Vector2(559.0, 108.0), "PAUSA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f0dbc4"))
@@ -1857,6 +1948,10 @@ func _draw_controls() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(552.0, 141.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a8d6ae"))
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		var key_event: InputEventKey = event as InputEventKey
+		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E:
+			_activate_nearby_lever()
 	# Android editor can deliver touch events or mouse events emulated from touch.
 	# Both are mapped into the Node2D canvas coordinate space.
 	if event is InputEventScreenTouch:
@@ -1899,6 +1994,10 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 		jump_requested = false
 		_save_game()
 		queue_redraw()
+		return
+	# Botao contextual de alavanca, sem mexer nos ataques e no joystick.
+	if Rect2(535.0, 208.0, 90.0, 44.0).has_point(pos) and _nearby_lever_index() >= 0:
+		_activate_nearby_lever()
 		return
 	# The left half is an invisible floating joystick activation zone.
 	if joystick_touch_id == -1 and pos.x >= 0.0 and pos.x <= 320.0 and pos.y >= 90.0 and pos.y <= 360.0:
