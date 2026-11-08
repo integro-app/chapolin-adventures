@@ -189,6 +189,8 @@ var save_notice_time := 0.0
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
+var sky_panorama: Texture2D
+var city_facades: Texture2D
 var idle_texture: Texture2D
 var walk_texture: Texture2D
 var run_texture: Texture2D
@@ -232,6 +234,13 @@ func _ready() -> void:
 	for _nano_pickup in nano_pickups:
 		nano_pickup_collected.append(false)
 	_reset_enemies()
+
+	# Camadas de arte da Cidade de Papelao, importadas pelo Godot como texturas.
+	# Se uma importacao falhar no Android, a cenografia anterior continua disponivel.
+	if ResourceLoader.exists("res://assets/stage/cidade_papelao_sky.svg"):
+		sky_panorama = load("res://assets/stage/cidade_papelao_sky.svg")
+	if ResourceLoader.exists("res://assets/stage/cidade_papelao_facades.svg"):
+		city_facades = load("res://assets/stage/cidade_papelao_facades.svg")
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
 	if ResourceLoader.exists("res://assets/chapolin_idle.png"):
@@ -1446,11 +1455,12 @@ func _respawn() -> void:
 	landing_timer = 0.0
 
 func _draw() -> void:
-	# Palco de televisao dos anos 70: os 'predios' sao paineis pintados.
-	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color("#161a29"))
-	draw_rect(Rect2(0.0, 25.0, 640.0, 274.0), Color("#6e6a80"))
-	draw_rect(Rect2(0.0, 156.0, 640.0, 144.0), Color("#807387"))
-	draw_rect(Rect2(0.0, 276.0, 640.0, 84.0), Color("#342e3a"))
+	# Noite azul-violeta como na arte aprovada. Nenhuma arte do heroi e alterada.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color("#11172d"))
+	if sky_panorama == null:
+		draw_rect(Rect2(0.0, 25.0, 640.0, 274.0), Color("#35406a"))
+		draw_rect(Rect2(0.0, 156.0, 640.0, 144.0), Color("#5d547b"))
+	draw_rect(Rect2(0.0, 300.0, 640.0, 60.0), Color("#292235"))
 
 	draw_set_transform(Vector2(-camera_x * 0.15, 0.0), 0.0, Vector2.ONE)
 	_draw_far_buildings()
@@ -1462,6 +1472,7 @@ func _draw() -> void:
 
 	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
 	_draw_decoration()
+	_draw_studio_set_details()
 	for ladder in ladders:
 		_draw_ladder(ladder)
 	for surface in ground_segments:
@@ -1616,7 +1627,10 @@ func _draw_title_screen() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(318.0, 310.0), "REINICIA O PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#b9a498"))
 
 func _draw_far_buildings() -> void:
-	# Fundo de pano pintado, preso por ganchos e emendas visiveis.
+	if sky_panorama != null:
+		draw_texture(sky_panorama, Vector2.ZERO)
+		return
+	# Fundo original de seguranca, quando o SVG nao for importado.
 	draw_rect(Rect2(-120.0, 41.0, 3100.0, 253.0), Color("#777387"))
 	for i in range(14):
 		var x := float(i) * 230.0 - 105.0
@@ -1653,7 +1667,12 @@ func _draw_far_buildings() -> void:
 	draw_circle(Vector2(510.0, 103.0), 2.0, Color("#b9a991"))
 
 func _draw_near_buildings() -> void:
-	# Cidade inteira fabricada com paineis cenograficos, nao predios reais.
+	if city_facades != null:
+		# Tres paineis em parallax; so cenografia, sem colisao nova.
+		for i in range(3):
+			draw_texture(city_facades, Vector2(float(i) * 1024.0, 0.0))
+		return
+	# Fachadas originais permanecem como fallback caso falte a textura.
 	for i in range(16):
 		var x := float(i) * 208.0 - 36.0
 		var top := 112.0 + float(i % 3) * 10.0
@@ -1754,6 +1773,39 @@ func _draw_decoration() -> void:
 		draw_line(Vector2(x, 255.0), Vector2(x + 46.0, 298.0), Color("#705343"), 3.0)
 		draw_line(Vector2(x + 46.0, 255.0), Vector2(x, 298.0), Color("#705343"), 3.0)
 		draw_line(Vector2(x + 23.0, 255.0), Vector2(x + 23.0, 300.0), Color("#55413b"), 3.0)
+
+func _draw_studio_set_details() -> void:
+	# Cenografia nao-colisiva inspirada no estudio de televisao da referencia.
+	# Totens, refletores, letreiros e objetos ao fundo das plataformas.
+	draw_rect(Rect2(25.0, 118.0, 132.0, 80.0), Color("#4b3542"))
+	draw_rect(Rect2(30.0, 123.0, 122.0, 70.0), Color("#d7b18b"))
+	draw_rect(Rect2(33.0, 126.0, 116.0, 64.0), Color("#d8b78d"))
+	draw_string(ThemeDB.fallback_font, Vector2(43.0, 151.0), "CIDADE DE", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#68444b"))
+	draw_string(ThemeDB.fallback_font, Vector2(39.0, 178.0), "PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 23, Color("#5d3940"))
+	for pole_x in [35.0, 147.0]:
+		draw_line(Vector2(pole_x, 193.0), Vector2(pole_x, 300.0), Color("#77503d"), 6.0)
+		draw_line(Vector2(pole_x, 202.0), Vector2(pole_x + 19.0, 286.0), Color("#aa7550"), 3.0)
+	# Claquete e camara televisiva junto ao primeiro trecho, fora dos controles.
+	draw_rect(Rect2(18.0, 264.0, 43.0, 28.0), Color("#282637"))
+	draw_rect(Rect2(24.0, 270.0, 31.0, 16.0), Color("#514b5f"))
+	draw_circle(Vector2(21.0, 265.0), 8.0, Color("#25243b"))
+	draw_circle(Vector2(52.0, 265.0), 8.0, Color("#25243b"))
+	draw_line(Vector2(30.0, 292.0), Vector2(19.0, 316.0), Color("#50455c"), 3.0)
+	draw_line(Vector2(45.0, 292.0), Vector2(53.0, 316.0), Color("#50455c"), 3.0)
+	draw_line(Vector2(38.0, 292.0), Vector2(38.0, 318.0), Color("#50455c"), 3.0)
+	# Placas de cinema ao lado da segunda alavanca; nao escondem o comando.
+	draw_rect(Rect2(1960.0, 140.0, 116.0, 78.0), Color("#674856"))
+	draw_rect(Rect2(1965.0, 145.0, 106.0, 68.0), Color("#d2ad84"))
+	draw_string(ThemeDB.fallback_font, Vector2(1974.0, 168.0), "GRANDE", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#79404b"))
+	draw_string(ThemeDB.fallback_font, Vector2(1974.0, 190.0), "ESPETACULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#79404b"))
+	draw_string(ThemeDB.fallback_font, Vector2(1986.0, 207.0), "DA TV", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#79404b"))
+	# Lanternas de cena em locais especificos, com pulsacao suave.
+	for lamp_x in [432.0, 963.0, 1846.0, 2224.0]:
+		var light_y := 177.0 if lamp_x < 1000.0 else 186.0
+		var flicker: float = 0.83 + sin(scene_ambience_clock * 2.3 + lamp_x) * 0.08
+		draw_rect(Rect2(lamp_x - 7.0, light_y - 8.0, 14.0, 16.0), Color("#4c2c42"))
+		draw_rect(Rect2(lamp_x - 3.0, light_y - 5.0, 6.0, 10.0), Color(1.0, 0.49 * flicker, 0.30 * flicker))
+		draw_circle(Vector2(lamp_x, light_y), 17.0, Color(1.0, 0.38, 0.18, 0.09 * flicker))
 
 func _draw_stone(surface: Rect2, is_floor: bool) -> void:
 	# Piso e pranchas de madeira pintada, alinhados aos retangulos de colisao.
