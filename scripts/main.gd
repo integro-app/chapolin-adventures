@@ -70,6 +70,13 @@ var crates: Array[Rect2] = []
 var pressure_plates: Array[Rect2] = []
 var puzzle_gates: Array[Rect2] = []
 var puzzle_gate_open := false
+var medals: Array[Vector2] = []
+var medal_collected: Array[bool] = []
+var medal_count := 0
+var respawn_point := Stage.RESPAWN
+var checkpoint_active := false
+var stage_complete := false
+var finish_medals := 0
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -86,6 +93,9 @@ func _ready() -> void:
 	crates = Stage.crates()
 	pressure_plates = Stage.pressure_plates()
 	puzzle_gates = Stage.puzzle_gates()
+	medals = Stage.medals()
+	for _medal in medals:
+		medal_collected.append(false)
 	low_beams = Stage.low_beams()
 	ladders = Stage.ladders()
 	ropes = Stage.ropes()
@@ -102,10 +112,18 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	if stage_complete:
+		if Input.is_action_just_pressed("ui_accept") or jump_requested:
+			_restart_stage()
+		jump_requested = false
+		queue_redraw()
+		return
 	rope_regrab_delay = maxf(0.0, rope_regrab_delay - delta)
 	if _handle_rope(delta):
+		_update_level_progress()
 		return
 	if _handle_ladder(delta):
+		_update_level_progress()
 		return
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
@@ -173,6 +191,11 @@ func _physics_process(delta: float) -> void:
 	# Quedas nos vãos retornam ao começo do trecho de testes.
 	if hero_pos.y > 435.0:
 		_respawn()
+
+	_update_level_progress()
+	if stage_complete:
+		queue_redraw()
+		return
 
 	var desired := "idle"
 	if not grounded and jump_texture != null:
@@ -459,8 +482,53 @@ func _move_x_with_crates(distance: float) -> float:
 				next_x = gate.end.x + HERO_HALF_WIDTH
 	return next_x
 
+func _update_level_progress() -> void:
+	# As medalhas sao opcionais, coletadas ao tocar no corpo do heroi.
+	# O progresso permanece quando ele cai e retorna ao checkpoint.
+	for i in range(medals.size()):
+		if medal_collected[i]:
+			continue
+		var medal: Vector2 = medals[i]
+		if absf(hero_pos.x - medal.x) <= 19.0 and medal.y >= hero_pos.y - STAND_HEIGHT - 5.0 and medal.y <= hero_pos.y + 9.0:
+			medal_collected[i] = true
+			medal_count += 1
+
+	var mark: Vector2 = Stage.checkpoint()
+	if not checkpoint_active and grounded:
+		if absf(hero_pos.x - mark.x) <= 31.0 and absf(hero_pos.y - mark.y) <= 7.0:
+			checkpoint_active = true
+			respawn_point = mark
+
+	var door: Rect2 = Stage.exit_door()
+	if not stage_complete and puzzle_gate_open and grounded:
+		if hero_pos.x >= door.position.x - 4.0 and hero_pos.x <= door.end.x + 4.0:
+			if absf(hero_pos.y - door.end.y) < 8.0:
+				finish_medals = medal_count
+				stage_complete = true
+				move_axis = 0.0
+				running = false
+				jump_requested = false
+
+func _restart_stage() -> void:
+	# Recomeca a fase inteira. Respawn por queda nao chama este reset.
+	puzzle_gate_open = false
+	crates = Stage.crates()
+	checkpoint_active = false
+	respawn_point = Stage.RESPAWN
+	stage_complete = false
+	finish_medals = 0
+	medal_count = 0
+	for i in range(medal_collected.size()):
+		medal_collected[i] = false
+	_release_joystick()
+	_respawn()
+	camera_x = 0.0
+	current_animation = "idle"
+	animation_time = 0.0
+	queue_redraw()
+
 func _respawn() -> void:
-	hero_pos = Stage.RESPAWN
+	hero_pos = respawn_point
 	vertical_speed = 0.0
 	grounded = true
 	move_axis = 0.0
@@ -518,12 +586,19 @@ func _draw() -> void:
 		_draw_low_beam(beam)
 	for rope in ropes:
 		_draw_rope(rope)
+	_draw_checkpoint()
+	_draw_exit_door()
+	for i in range(medals.size()):
+		if not medal_collected[i]:
+			_draw_medal(medals[i])
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
 	_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_controls()
+	if stage_complete:
+		_draw_finish_screen()
 
 func _draw_far_buildings() -> void:
 	# Fundo de pano pintado, preso por ganchos e emendas visiveis.
@@ -714,6 +789,46 @@ func _draw_puzzle_gate(gate: Rect2) -> void:
 	var light := Color("#7fca8b") if puzzle_gate_open else Color("#e2a26d")
 	draw_circle(Vector2(gate.position.x + gate.size.x / 2.0, gate.position.y - 10.0), 5.0, light)
 
+func _draw_medal(world_pos: Vector2) -> void:
+	# Medalha de latão cenografica, consistente com a arte retro do palco.
+	draw_circle(world_pos + Vector2(1.0, 2.0), 10.0, Color("#49362f"))
+	draw_circle(world_pos, 9.0, Color("#e4ac4f"))
+	draw_circle(world_pos, 6.5, Color("#f6d47b"))
+	draw_circle(world_pos, 4.2, Color("#d89d3d"))
+	draw_string(ThemeDB.fallback_font, world_pos + Vector2(-5.5, 3.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#463332"))
+
+func _draw_checkpoint() -> void:
+	var mark: Vector2 = Stage.checkpoint()
+	var pole_top := mark + Vector2(0.0, -78.0)
+	draw_line(mark, pole_top, Color("#493d3c"), 5.0)
+	draw_line(mark + Vector2(-7.0, 0.0), mark + Vector2(7.0, 0.0), Color("#c5a279"), 4.0)
+	var flag_color := Color("#77bd85") if checkpoint_active else Color("#b47b60")
+	draw_colored_polygon(PackedVector2Array([
+		pole_top, pole_top + Vector2(45.0, 9.0),
+		pole_top + Vector2(0.0, 26.0)
+	]), flag_color)
+	draw_string(ThemeDB.fallback_font, pole_top + Vector2(8.0, 17.0), "SAVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
+
+func _draw_exit_door() -> void:
+	var door: Rect2 = Stage.exit_door()
+	draw_rect(Rect2(door.position.x - 6.0, door.position.y - 9.0, door.size.x + 12.0, door.size.y + 9.0), Color("#624642"))
+	draw_rect(door, Color("#332e42"))
+	draw_rect(Rect2(door.position.x + 5.0, door.position.y + 6.0, door.size.x - 10.0, door.size.y - 6.0), Color("#86694e"))
+	draw_rect(Rect2(door.position.x + 8.0, door.position.y + 10.0, door.size.x - 16.0, door.size.y - 10.0), Color("#4d4650"))
+	draw_circle(door.position + Vector2(door.size.x - 13.0, door.size.y * 0.58), 3.0, Color("#f3cc86"))
+	draw_rect(Rect2(door.position.x - 7.0, door.position.y - 23.0, door.size.x + 14.0, 14.0), Color("#dec093"))
+	draw_string(ThemeDB.fallback_font, door.position + Vector2(4.0, -12.0), "SAIDA", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#46382f"))
+
+func _draw_finish_screen() -> void:
+	# Painel simples de conclusao; PULO serve para recomeçar a fase.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.06, 0.07, 0.10, 0.82))
+	draw_rect(Rect2(92.0, 98.0, 456.0, 174.0), Color("#342b35"))
+	draw_rect(Rect2(99.0, 105.0, 442.0, 160.0), Color("#57434a"))
+	draw_string(ThemeDB.fallback_font, Vector2(157.0, 143.0), "FASE CONCLUIDA!", HORIZONTAL_ALIGNMENT_LEFT, -1, 27, Color("#f5d697"))
+	var score_label := "MEDALHAS: %d / %d" % [finish_medals, medals.size()]
+	draw_string(ThemeDB.fallback_font, Vector2(224.0, 187.0), score_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#f0e6ce"))
+	draw_string(ThemeDB.fallback_font, Vector2(173.0, 235.0), "APERTE PULO PARA REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#e9c8a0"))
+
 func _draw_crate(block: Rect2) -> void:
 	# Caixa cenografica com travessas, pregos e etiqueta de inventario.
 	draw_rect(block, Color("#5a3b31"))
@@ -843,6 +958,9 @@ func _draw_controls() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
 	var puzzle_text := "GRADE ABERTA!" if puzzle_gate_open else "DESAFIO: EMPURRE A CAIXA ATE A PLACA"
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 47.0), puzzle_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e9d1ac"))
+	draw_string(ThemeDB.fallback_font, Vector2(504.0, 26.0), "CH %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f6d47b"))
+	if checkpoint_active:
+		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
 
 func _input(event: InputEvent) -> void:
 	# Android editor can deliver touch events or mouse events emulated from touch.
