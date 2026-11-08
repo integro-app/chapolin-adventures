@@ -69,6 +69,9 @@ const SECRET_LIFE_LIMIT := 5
 const BREAK_EFFECT_SECONDS := 0.42
 const STORY_SKIP_RECT := Rect2(63.0, 278.0, 157.0, 48.0)
 const STORY_NEXT_RECT := Rect2(403.0, 278.0, 169.0, 48.0)
+const TITLE_PLAY_RECT := Rect2(60.0, 245.0, 211.0, 54.0)
+const TITLE_NEW_RECT := Rect2(286.0, 245.0, 211.0, 54.0)
+const STAGE_BANNER_DURATION := 3.4
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -145,6 +148,11 @@ var story_active := false
 var story_scene_id := ""
 var story_step := 0
 var story_pages: Array[Dictionary] = []
+var title_active := true
+var title_has_save := false
+var title_clock := 0.0
+var stage_banner_timer := 0.0
+var scene_ambience_clock := 0.0
 var enemy_patrols: Array[Vector3] = []
 var enemy_positions: Array[Vector2] = []
 var enemy_directions: Array[float] = []
@@ -234,12 +242,17 @@ func _ready() -> void:
 		run_texture = load("res://assets/chapolin/run.png")
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
+	# A tela inicial deixa o jogador escolher continuar ou iniciar a aventura.
+	title_has_save = FileAccess.file_exists(SAVE_PATH)
 	_load_game()
-	if not intro_seen and not stage_complete and not game_over:
-		_start_story("intro")
+	title_active = true
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	if title_active:
+		title_clock += delta
+		queue_redraw()
+		return
 	if save_dirty:
 		save_delay -= delta
 		if save_delay <= 0.0:
@@ -254,6 +267,8 @@ func _physics_process(delta: float) -> void:
 	if pause_menu_open:
 		queue_redraw()
 		return
+	scene_ambience_clock += delta
+	stage_banner_timer = maxf(0.0, stage_banner_timer - delta)
 	if stage_complete or game_over:
 		if Input.is_action_just_pressed("ui_accept") or jump_requested:
 			_restart_stage()
@@ -1286,6 +1301,7 @@ func _finish_story() -> void:
 		return
 	if story_scene_id == "intro":
 		intro_seen = true
+		stage_banner_timer = STAGE_BANNER_DURATION
 	elif story_scene_id == "checkpoint":
 		checkpoint_story_seen = true
 	story_active = false
@@ -1336,6 +1352,8 @@ func _update_level_progress() -> void:
 
 func _restart_stage() -> void:
 	# Recomeca a fase inteira; cair ou levar dano nao apaga o progresso.
+	title_active = false
+	stage_banner_timer = 0.0
 	pause_menu_open = false
 	story_active = false
 	intro_seen = false
@@ -1510,7 +1528,10 @@ func _draw() -> void:
 	if hurt_grace <= 0.0 or int(hurt_grace * 14.0) % 2 == 0:
 		_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_cinematic_atmosphere()
 	_draw_controls()
+	if stage_banner_timer > 0.0 and not story_active and not title_active and not pause_menu_open:
+		_draw_stage_banner()
 	if pause_menu_open:
 		_draw_pause_inventory()
 	if stage_complete:
@@ -1519,6 +1540,80 @@ func _draw() -> void:
 		_draw_game_over()
 	if story_active:
 		_draw_story_scene()
+	if title_active:
+		_draw_title_screen()
+
+func _begin_from_title(new_game: bool) -> void:
+	if not title_active:
+		return
+	title_active = false
+	_release_joystick()
+	jump_requested = false
+	if new_game:
+		# A rotina de reinicio ja limpa inventario e inicia o prologo.
+		_restart_stage()
+	else:
+		# Continua do ultimo checkpoint sem descartar o arquivo salvo.
+		stage_banner_timer = STAGE_BANNER_DURATION
+	queue_redraw()
+
+func _draw_cinematic_atmosphere() -> void:
+	# Camada barata para mobile: vinheta suave e poeira cenografica.
+	draw_rect(Rect2(0.0, 0.0, 7.0, 360.0), Color(0.03, 0.03, 0.07, 0.26))
+	draw_rect(Rect2(633.0, 0.0, 7.0, 360.0), Color(0.03, 0.03, 0.07, 0.26))
+	draw_rect(Rect2(0.0, 345.0, 640.0, 15.0), Color(0.03, 0.03, 0.07, 0.23))
+	for i in range(11):
+		var drift: float = scene_ambience_clock * (4.0 + float(i % 4))
+		var x: float = fposmod(35.0 + float(i * 71) + drift - camera_x * 0.07, 640.0)
+		var y: float = 85.0 + float((i * 41) % 192) + sin(scene_ambience_clock * 0.6 + float(i)) * 7.0
+		draw_circle(Vector2(x, y), 1.3 if i % 3 == 0 else 0.8, Color(0.98, 0.84, 0.63, 0.24))
+
+func _draw_stage_banner() -> void:
+	# Cartela cinematografica de poucos segundos, sem pausar a partida.
+	var visible_alpha: float = clampf(stage_banner_timer / 0.45, 0.0, 1.0)
+	var elapsed: float = STAGE_BANNER_DURATION - stage_banner_timer
+	visible_alpha *= clampf(elapsed / 0.40, 0.0, 1.0)
+	draw_rect(Rect2(168.0, 112.0, 304.0, 66.0), Color(0.05, 0.06, 0.10, 0.81 * visible_alpha))
+	draw_rect(Rect2(168.0, 112.0, 4.0, 66.0), Color(0.86, 0.56, 0.24, visible_alpha))
+	draw_string(ThemeDB.fallback_font, Vector2(186.0, 134.0), "CAPITULO 00 - PROLOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.99, 0.85, 0.65, visible_alpha))
+	draw_string(ThemeDB.fallback_font, Vector2(186.0, 160.0), "CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color(1.0, 0.96, 0.87, visible_alpha))
+
+func _draw_title_screen() -> void:
+	# Abertura com tipografia, escudo e o sprite oficial do personagem.
+	# A cidade aparece ao fundo; nenhum arquivo de arte e substituido.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.03, 0.04, 0.08, 0.93))
+	draw_rect(Rect2(0.0, 0.0, 640.0, 28.0), Color("#171522"))
+	draw_rect(Rect2(0.0, 336.0, 640.0, 24.0), Color("#171522"))
+	for i in range(20):
+		var frame_x: float = 12.0 + float(i) * 32.0
+		draw_rect(Rect2(frame_x, 8.0, 14.0, 10.0), Color("#51434b"))
+		draw_rect(Rect2(frame_x, 343.0, 14.0, 10.0), Color("#51434b"))
+	var glow: float = 0.06 + sin(title_clock * 1.2) * 0.02
+	draw_circle(Vector2(490.0, 157.0), 114.0, Color(0.88, 0.43, 0.20, glow))
+	draw_circle(Vector2(490.0, 157.0), 85.0, Color(0.85, 0.48, 0.24, 0.10))
+	# Moldura vertical de poster televisivo.
+	draw_rect(Rect2(425.0, 55.0, 126.0, 219.0), Color("#48363d"))
+	draw_rect(Rect2(429.0, 59.0, 118.0, 211.0), Color("#7e5145"))
+	if idle_texture != null:
+		var frame_width: float = float(idle_texture.get_width()) / 8.0
+		var frame_height: float = float(idle_texture.get_height())
+		draw_texture_rect_region(idle_texture, Rect2(437.0, 74.0, 104.0, 190.0), Rect2(0.0, 0.0, frame_width, frame_height), Color.WHITE, false, true)
+	draw_rect(Rect2(45.0, 76.0, 344.0, 3.0), Color("#d69a4e"))
+	draw_string(ThemeDB.fallback_font, Vector2(44.0, 123.0), "CHAPOLIN", HORIZONTAL_ALIGNMENT_LEFT, -1, 48, Color("#f8e2b4"))
+	draw_string(ThemeDB.fallback_font, Vector2(48.0, 162.0), "ADVENTURES", HORIZONTAL_ALIGNMENT_LEFT, -1, 31, Color("#db8650"))
+	draw_rect(Rect2(47.0, 177.0, 275.0, 1.0), Color("#6f5550"))
+	draw_string(ThemeDB.fallback_font, Vector2(48.0, 199.0), "UMA AVENTURA EM ESTILO RETRO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#e0c9ac"))
+	draw_string(ThemeDB.fallback_font, Vector2(48.0, 220.0), "NO UNIVERSO DO HEROI COLORADO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#bca797"))
+	draw_rect(TITLE_PLAY_RECT, Color("#b86d37"))
+	draw_rect(Rect2(64.0, 249.0, 203.0, 46.0), Color("#754735"))
+	draw_rect(TITLE_NEW_RECT, Color("#554551"))
+	draw_rect(Rect2(290.0, 249.0, 203.0, 46.0), Color("#302f40"))
+	var main_label := "CONTINUAR" if title_has_save else "JOGAR"
+	draw_string(ThemeDB.fallback_font, Vector2(100.0, 280.0), main_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color("#fff2dc"))
+	draw_string(ThemeDB.fallback_font, Vector2(314.0, 280.0), "NOVO JOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("#f0d7bb"))
+	draw_string(ThemeDB.fallback_font, Vector2(68.0, 324.0), "AVENTURA 01  |  CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#c4aa94"))
+	if title_has_save:
+		draw_string(ThemeDB.fallback_font, Vector2(318.0, 310.0), "REINICIA O PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#b9a498"))
 
 func _draw_far_buildings() -> void:
 	# Fundo de pano pintado, preso por ganchos e emendas visiveis.
@@ -2178,9 +2273,22 @@ func _draw_controls() -> void:
 	draw_rect(Rect2(535.0, 261.0, 90.0, 37.0), nano_color)
 	var nano_label := "NANO %ds" % int(ceil(nano_remaining)) if _nano_active() else "NANO %d" % nano_charges
 	draw_string(ThemeDB.fallback_font, Vector2(543.0, 284.0), nano_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
-	var puzzle_text := "GRADE ABERTA!" if puzzle_gate_open else "DESAFIO: EMPURRE A CAIXA ATE A PLACA"
-	draw_string(ThemeDB.fallback_font, Vector2(15.0, 47.0), puzzle_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e9d1ac"))
+	# Identidade de capitulo e objetivo contextual substituem o rotulo de teste.
+	draw_rect(Rect2(8.0, 25.0, 329.0, 30.0), Color(0.08, 0.10, 0.16, 0.76))
+	draw_rect(Rect2(8.0, 25.0, 3.0, 30.0), Color("#d9a451"))
+	draw_string(ThemeDB.fallback_font, Vector2(17.0, 38.0), "PROLOGO  /  CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f5d6a0"))
+	var objective := "EMPURRE A CAIXA PARA ABRIR A GRADE"
+	if puzzle_gate_open and not checkpoint_active:
+		objective = "SIGA ATE O PONTO DE APOIO"
+	elif checkpoint_active and (lever_states.is_empty() or not lever_states[0]):
+		objective = "ENCONTRE A PRIMEIRA ALAVANCA"
+	elif lever_states.size() > 1 and not lever_states[1]:
+		objective = "LIGUE A PLATAFORMA FINAL"
+	elif lever_states.size() > 1 and lever_states[1]:
+		objective = "ENCONTRE A MORADORA E A SAIDA"
+	if stage_complete:
+		objective = "RESGATE REALIZADO"
+	draw_string(ThemeDB.fallback_font, Vector2(17.0, 51.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d1beac"))
 	draw_string(ThemeDB.fallback_font, Vector2(504.0, 26.0), "CH %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f6d47b"))
 	if checkpoint_active:
 		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
@@ -2203,8 +2311,12 @@ func _draw_controls() -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key_event: InputEventKey = event as InputEventKey
-		if key_event.pressed and not key_event.echo and key_event.keycode == KEY_E:
-			_activate_nearby_lever()
+		if key_event.pressed and not key_event.echo:
+			if title_active and (key_event.keycode == KEY_ENTER or key_event.keycode == KEY_SPACE):
+				_begin_from_title(not title_has_save)
+				return
+			if key_event.keycode == KEY_E:
+				_activate_nearby_lever()
 	# Android editor can deliver touch events or mouse events emulated from touch.
 	# Both are mapped into the Node2D canvas coordinate space.
 	if event is InputEventScreenTouch:
@@ -2231,6 +2343,12 @@ func _input(event: InputEvent) -> void:
 			_pointer_moved(motion_event.position, MOUSE_POINTER_ID)
 
 func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
+	if title_active:
+		if TITLE_PLAY_RECT.has_point(pos):
+			_begin_from_title(not title_has_save)
+		elif TITLE_NEW_RECT.has_point(pos):
+			_begin_from_title(true)
+		return
 	if story_active:
 		if STORY_SKIP_RECT.has_point(pos):
 			_finish_story()
