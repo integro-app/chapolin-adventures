@@ -19,8 +19,10 @@ const CLIMB_SPEED := 90.0
 const JOYSTICK_RADIUS := 51.0
 const JOYSTICK_DEADZONE := 13.0
 const MOUSE_POINTER_ID := -2
-const ROPE_FOOT_OFFSET := 52.0
-const ROPE_GRAB_DISTANCE := 48.0
+const ROPE_FOOT_OFFSET := 82.0
+const ROPE_GRAB_DISTANCE := 18.0
+const ROPE_MIN_GRIP := 12.0
+const ROPE_CLIMB_SPEED := 95.0
 const ROPE_SWING_ACCEL := 8.4
 const ROPE_MAX_ANGLE := 0.78
 
@@ -37,6 +39,8 @@ var climbing := false
 var swinging := false
 var rope_anchor := Vector2.ZERO
 var rope_length := 0.0
+var rope_grip_distance := 0.0
+var rope_blocked_anchor_x := -1.0
 var rope_angle := 0.0
 var rope_angular_velocity := 0.0
 var rope_release_vx := 0.0
@@ -183,29 +187,33 @@ func _physics_process(delta: float) -> void:
 
 
 func _rope_near(x: float, y: float) -> Vector3:
+	# Colisao real com o corpo: pode agarrar no meio da corda ou na ponta.
+	var hero_top := y - STAND_HEIGHT
 	for rope in ropes:
-		var hanging_feet := rope.y + rope.z + ROPE_FOOT_OFFSET
-		if absf(x - rope.x) <= ROPE_GRAB_DISTANCE and absf(y - hanging_feet) <= 58.0:
+		var rope_bottom := rope.y + rope.z
+		if absf(x - rope.x) <= ROPE_GRAB_DISTANCE and hero_top <= rope_bottom + 6.0 and y >= rope.y - 4.0:
 			return rope
 	return Vector3.ZERO
 
 func _handle_rope(delta: float) -> bool:
-	# CIMA agarra a corda na altura certa; esquerda/direita provocam balanco.
-	var wants_grab := climb_up_held or Input.is_action_pressed("ui_up")
 	if not swinging:
-		if not wants_grab or rope_regrab_delay > 0.0 or climbing:
+		var nearby := _rope_near(hero_pos.x, hero_pos.y)
+		# Ao soltar, o Chapolin deve se afastar antes de agarrar a mesma corda.
+		if rope_blocked_anchor_x >= 0.0 and (nearby.z <= 0.0 or absf(nearby.x - rope_blocked_anchor_x) > 1.0):
+			rope_blocked_anchor_x = -1.0
+		if rope_regrab_delay > 0.0 or climbing or nearby.z <= 0.0 or rope_blocked_anchor_x >= 0.0:
 			return false
-		# Uma escada tem prioridade quando os dois objetos forem proximos.
+		# Escadas continuam com prioridade se o Chapolin tocar nos dois objetos.
 		if _ladder_near(hero_pos.x, hero_pos.y).size.x > 0.0:
 			return false
-		var nearby := _rope_near(hero_pos.x, hero_pos.y)
-		if nearby.z <= 0.0:
-			return false
+		# Agarra automaticamente; dispensa apertar CIMA.
 		swinging = true
 		rope_anchor = Vector2(nearby.x, nearby.y)
 		rope_length = nearby.z
-		rope_angle = clampf((hero_pos.x - nearby.x) / rope_length, -0.35, 0.35)
+		rope_grip_distance = clampf(hero_pos.y - ROPE_FOOT_OFFSET - nearby.y, ROPE_MIN_GRIP, rope_length)
+		rope_angle = clampf((hero_pos.x - nearby.x) / maxf(rope_grip_distance, 1.0), -0.30, 0.30)
 		rope_angular_velocity = 0.0
+		rope_release_vx = 0.0
 		grounded = false
 		climbing = false
 		running = false
@@ -213,17 +221,26 @@ func _handle_rope(delta: float) -> bool:
 		vertical_speed = 0.0
 		run_hold_time = 0.0
 		landing_timer = 0.0
+
 	if Input.is_action_just_pressed("ui_accept") or jump_requested:
-		# Soltar sem "teleportar": preserva impulso tangencial e inicia queda.
+		# Salto com impulso tangencial; evita recaptura ate sair da area da corda.
 		swinging = false
-		rope_regrab_delay = 0.6
-		rope_release_vx = clampf(rope_angular_velocity * rope_length * cos(rope_angle), -280.0, 280.0)
+		rope_blocked_anchor_x = rope_anchor.x
+		rope_regrab_delay = 0.85
+		rope_release_vx = clampf(rope_angular_velocity * rope_grip_distance * cos(rope_angle), -280.0, 280.0)
 		vertical_speed = -155.0
 		grounded = false
 		air_time = 0.0
 		jump_requested = false
 		_update_climb_visuals(delta, "jump")
 		return true
+
+	# Joystick vertical desloca as maos ao longo de toda a corda.
+	# Diagonais permitem escalar enquanto o corpo balanca.
+	var climb_axis := Input.get_axis("ui_up", "ui_down")
+	if joystick_touch_id != -1 and absf(joystick_offset.y) > JOYSTICK_DEADZONE:
+		climb_axis = clampf(joystick_offset.y / JOYSTICK_RADIUS, -1.0, 1.0)
+	rope_grip_distance = clampf(rope_grip_distance + climb_axis * ROPE_CLIMB_SPEED * delta, ROPE_MIN_GRIP, rope_length)
 
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
@@ -237,7 +254,9 @@ func _handle_rope(delta: float) -> bool:
 	elif rope_angle <= -ROPE_MAX_ANGLE:
 		rope_angle = -ROPE_MAX_ANGLE
 		rope_angular_velocity = maxf(0.0, rope_angular_velocity)
-	hero_pos = rope_anchor + Vector2(sin(rope_angle), cos(rope_angle)) * rope_length + Vector2(0.0, ROPE_FOOT_OFFSET)
+
+	var rope_direction := Vector2(sin(rope_angle), cos(rope_angle))
+	hero_pos = rope_anchor + rope_direction * rope_grip_distance + Vector2(0.0, ROPE_FOOT_OFFSET)
 	hero_pos.x = clampf(hero_pos.x, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
 	vertical_speed = 0.0
 	air_time = 0.0
@@ -377,6 +396,8 @@ func _respawn() -> void:
 	swinging = false
 	rope_anchor = Vector2.ZERO
 	rope_length = 0.0
+	rope_grip_distance = 0.0
+	rope_blocked_anchor_x = -1.0
 	rope_angle = 0.0
 	rope_angular_velocity = 0.0
 	rope_release_vx = 0.0
@@ -621,6 +642,9 @@ func _draw_rope(rope: Vector3) -> void:
 		var p := top.lerp(end_point, t)
 		draw_circle(p, 2.4, Color("#e6c79f"))
 	draw_circle(end_point, 5.0, Color("#8f6143"))
+	if swinging and absf(rope_anchor.x - rope.x) < 1.0:
+		var grip_point := rope_anchor + Vector2(sin(rope_angle), cos(rope_angle)) * rope_grip_distance
+		draw_circle(grip_point, 4.0, Color("#f0cf9e"))
 	if not swinging:
 		draw_string(ThemeDB.fallback_font, Vector2(rope.x - 22.0, rope.y + 16.0), "CORDA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f0ce9e"))
 
