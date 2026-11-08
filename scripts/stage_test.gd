@@ -145,3 +145,15 @@ static func moving_platforms() -> Array[Dictionary]:
 		{"min_x": 1105.0, "max_x": 1215.0, "y": 194.0, "width": 74.0, "speed": 45.0},
 		{"min_x": 1915.0, "max_x": 2050.0, "y": 213.0, "width": 70.0, "speed": 52.0}
 	]
+
+# Alavancas de estúdio: z=1 destrava a grade; z=2 liga a plataforma 2.
+# Primeira junto ao checkpoint (antes da grade), segunda depois do vao.
+static func levers() -> Array[Vector3]:
+	return [
+		Vector3(1480.0, 300.0, 1.0),
+		Vector3(1910.0, 300.0, 2.0)
+	]
+
+# Grade acionada pela primeira alavanca, independente da placa/caixa.
+static func lever_gate() -> Rect2:
+	return Rect2(1538.0, 141.0, 16.0, 159.0)
