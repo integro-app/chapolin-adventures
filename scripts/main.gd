@@ -2262,23 +2262,42 @@ func _draw_chapolin() -> void:
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_pause_inventory() -> void:
-	# Inventario consultavel durante a pausa, sem cobrir o direcional em jogo.
-	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.07, 0.08, 0.11, 0.83))
-	draw_rect(Rect2(82.0, 45.0, 476.0, 264.0), Color("#332d39"))
-	draw_rect(Rect2(88.0, 51.0, 464.0, 252.0), Color("#51404a"))
-	draw_string(ThemeDB.fallback_font, Vector2(240.0, 84.0), "JOGO PAUSADO", HORIZONTAL_ALIGNMENT_LEFT, -1, 23, Color("#f6d2a0"))
-	draw_string(ThemeDB.fallback_font, Vector2(122.0, 119.0), "INVENTARIO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f6d2a0"))
-	draw_string(ThemeDB.fallback_font, Vector2(122.0, 150.0), "MARRETA: " + ("COLETADA" if hammer_unlocked else "NAO COLETADA"), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(122.0, 179.0), "CORNETA: %d CARGAS" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(122.0, 208.0), "NANICOLINA: %d USOS" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(340.0, 148.0), "MEDALHAS: %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#ead59d"))
-	draw_string(ThemeDB.fallback_font, Vector2(340.0, 236.0), "SEGREDOS: %d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f3d59d"))
-	draw_string(ThemeDB.fallback_font, Vector2(340.0, 179.0), "VIDAS: %d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f3e1ce"))
-	draw_string(ThemeDB.fallback_font, Vector2(340.0, 208.0), "CHECKPOINT: " + ("SIM" if checkpoint_active else "NAO"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c7dfcb"))
-	draw_rect(Rect2(140.0, 251.0, 166.0, 43.0), Color("#466856"))
-	draw_rect(Rect2(332.0, 251.0, 166.0, 43.0), Color("#84604b"))
-	draw_string(ThemeDB.fallback_font, Vector2(177.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(357.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
+	# Inventario na mesma linguagem do HUD: painel editorial limpo e legivel.
+	# Hitboxes dos botoes continuar e reiniciar permanecem inalteradas.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.025, 0.035, 0.07, 0.87))
+	draw_rect(Rect2(88.0, 44.0, 464.0, 266.0), Color("#3a303e"))
+	draw_rect(Rect2(94.0, 50.0, 452.0, 254.0), Color("#1c2234"))
+	draw_rect(Rect2(94.0, 50.0, 452.0, 3.0), Color("#c99b65"))
+	draw_string(ThemeDB.fallback_font, Vector2(119.0, 85.0), "JOGO PAUSADO", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color("#f5d5a7"))
+	draw_string(ThemeDB.fallback_font, Vector2(120.0, 105.0), "INVENTARIO E PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#bfb0ac"))
+	draw_line(Vector2(118.0, 113.0), Vector2(522.0, 113.0), Color("#564654"), 1.5)
+	draw_line(Vector2(319.0, 127.0), Vector2(319.0, 234.0), Color("#564654"), 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(121.0, 138.0), "EQUIPAMENTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e1af79"))
+	draw_string(ThemeDB.fallback_font, Vector2(341.0, 138.0), "PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e1af79"))
+
+	var normal_color := Color("#f1e4d2")
+	var collected_color := Color("#a9d8b4") if hammer_unlocked else Color("#9a8b98")
+	draw_string(ThemeDB.fallback_font, Vector2(121.0, 166.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, normal_color)
+	draw_string(ThemeDB.fallback_font, Vector2(255.0, 166.0), "OK" if hammer_unlocked else "--", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, collected_color)
+	draw_string(ThemeDB.fallback_font, Vector2(121.0, 194.0), "CORNETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, normal_color)
+	draw_string(ThemeDB.fallback_font, Vector2(244.0, 194.0), "%d CARGAS" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#add8df") if horn_unlocked else Color("#9a8b98"))
+	draw_string(ThemeDB.fallback_font, Vector2(121.0, 222.0), "NANICOLINA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, normal_color)
+	draw_string(ThemeDB.fallback_font, Vector2(248.0, 222.0), "%d USOS" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#b8dcb2") if nano_unlocked else Color("#9a8b98"))
+
+	draw_string(ThemeDB.fallback_font, Vector2(341.0, 165.0), "MEDALHAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, normal_color)
+	draw_string(ThemeDB.fallback_font, Vector2(467.0, 165.0), "%d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#efd18f"))
+	draw_string(ThemeDB.fallback_font, Vector2(341.0, 189.0), "SEGREDOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, normal_color)
+	draw_string(ThemeDB.fallback_font, Vector2(467.0, 189.0), "%d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#efd18f"))
+	draw_string(ThemeDB.fallback_font, Vector2(341.0, 213.0), "VIDAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, normal_color)
+	draw_string(ThemeDB.fallback_font, Vector2(480.0, 213.0), "%d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f0dcb9"))
+	draw_string(ThemeDB.fallback_font, Vector2(341.0, 237.0), "CHECKPOINT " + ("SALVO" if checkpoint_active else "INICIAL"), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#a4d5b0") if checkpoint_active else Color("#c7b6b5"))
+
+	draw_rect(Rect2(140.0, 251.0, 166.0, 43.0), Color("#365e56"))
+	draw_rect(Rect2(144.0, 255.0, 158.0, 35.0), Color("#427a65"))
+	draw_rect(Rect2(332.0, 251.0, 166.0, 43.0), Color("#755149"))
+	draw_rect(Rect2(336.0, 255.0, 158.0, 35.0), Color("#945e50"))
+	draw_string(ThemeDB.fallback_font, Vector2(178.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f8eedf"))
+	draw_string(ThemeDB.fallback_font, Vector2(355.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f8eedf"))
 
 func _draw_lever(index: int) -> void:
 	var lever: Vector3 = lever_points[index]
