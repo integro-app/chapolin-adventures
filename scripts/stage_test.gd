@@ -50,3 +50,11 @@ static func ladders() -> Array[Rect2]:
 		Rect2(1293.0, 214.0, 22.0, 86.0),
 		Rect2(2110.0, 218.0, 22.0, 82.0)
 	]
+
+# Cordas suspensas dos refletores: x/y = ancora, z = comprimento da corda.
+# Posicionadas nas duas passagens para permitir balancar sobre os vaos.
+static func ropes() -> Array[Vector3]:
+	return [
+		Vector3(818.0, 102.0, 120.0),
+		Vector3(1595.0, 100.0, 122.0)
+	]
