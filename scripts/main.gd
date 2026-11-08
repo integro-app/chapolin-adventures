@@ -65,6 +65,8 @@ const LEDGE_CLIMB_SECONDS := 0.30
 const LEDGE_RELEASE_DELAY := 0.55
 const LEVER_REACH := 43.0
 const LEVER_HEIGHT_REACH := 58.0
+const SECRET_LIFE_LIMIT := 5
+const BREAK_EFFECT_SECONDS := 0.42
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -121,6 +123,12 @@ var puzzle_gate_open := false
 var lever_points: Array[Vector3] = []
 var lever_states: Array[bool] = []
 var lever_gate: Rect2 = Rect2()
+var fragile_walls: Array[Rect2] = []
+var fragile_broken: Array[bool] = []
+var secret_rewards: Array[Vector2] = []
+var secret_collected: Array[bool] = []
+var secret_count := 0
+var break_effects: Array[float] = []
 var medals: Array[Vector2] = []
 var medal_collected: Array[bool] = []
 var medal_count := 0
@@ -184,6 +192,13 @@ func _ready() -> void:
 	lever_gate = Stage.lever_gate()
 	for _lever in lever_points:
 		lever_states.append(false)
+	fragile_walls = Stage.fragile_walls()
+	secret_rewards = Stage.secret_rewards()
+	for _panel in fragile_walls:
+		fragile_broken.append(false)
+		break_effects.append(0.0)
+	for _reward in secret_rewards:
+		secret_collected.append(false)
 	medals = Stage.medals()
 	for _medal in medals:
 		medal_collected.append(false)
@@ -229,6 +244,8 @@ func _physics_process(delta: float) -> void:
 		queue_redraw()
 		return
 	var previous_foot_y: float = hero_pos.y
+	for i in range(break_effects.size()):
+		break_effects[i] = maxf(0.0, break_effects[i] - delta)
 	_update_nano_timer(delta)
 	hammer_cooldown = maxf(0.0, hammer_cooldown - delta)
 	hammer_swing_time = maxf(0.0, hammer_swing_time - delta)
@@ -467,6 +484,9 @@ func _ledge_destination_is_clear(destination: Vector2) -> bool:
 				return false
 	if not _lever_gate_open() and bounds.intersects(lever_gate):
 		return false
+	for i in range(fragile_walls.size()):
+		if not fragile_broken[i] and bounds.intersects(fragile_walls[i]):
+			return false
 	return true
 
 func _try_grab_ledge() -> bool:
@@ -764,6 +784,9 @@ func _try_push_crate(crate_index: int, delta_x: float) -> bool:
 				return false
 	if not _lever_gate_open() and next_block.intersects(lever_gate):
 		return false
+	for i in range(fragile_walls.size()):
+		if not fragile_broken[i] and next_block.intersects(fragile_walls[i]):
+			return false
 	crates[crate_index] = next_block
 	_mark_save_dirty()
 	if _is_plate_pressed():
@@ -797,6 +820,18 @@ func _move_x_with_crates(distance: float) -> float:
 			next_x = beam.position.x - half_width
 		elif distance < 0.0 and hero_pos.x - half_width >= beam.end.x and next_x - half_width < beam.end.x:
 			next_x = beam.end.x + half_width
+
+	# Paineis frageis continuam solidos ate um golpe de marreta.
+	for i in range(fragile_walls.size()):
+		if fragile_broken[i]:
+			continue
+		var wall: Rect2 = fragile_walls[i]
+		if head_y >= wall.end.y or hero_pos.y <= wall.position.y:
+			continue
+		if distance > 0.0 and hero_pos.x + half_width <= wall.position.x and next_x + half_width > wall.position.x:
+			next_x = wall.position.x - half_width
+		elif distance < 0.0 and hero_pos.x - half_width >= wall.end.x and next_x - half_width < wall.end.x:
+			next_x = wall.end.x + half_width
 
 	# As grades dos dois desafios tem condicoes independentes.
 	if not _lever_gate_open() and head_y < lever_gate.end.y and hero_pos.y > lever_gate.position.y:
@@ -1000,6 +1035,18 @@ func _use_hammer() -> void:
 			enemy_active[i] = false
 			enemy_stun[i] = 0.0
 			_mark_save_dirty()
+	# A mesma Marreta tambem destroi paineis de papelao a frente.
+	for i in range(fragile_walls.size()):
+		if fragile_broken[i]:
+			continue
+		var wall: Rect2 = fragile_walls[i]
+		var near_edge: float = wall.position.x if facing > 0 else wall.end.x
+		var forward: float = float(facing) * (near_edge - hero_pos.x)
+		var vertical_overlap: bool = hero_pos.y - _hero_collision_height() <= wall.end.y and hero_pos.y >= wall.position.y - 12.0
+		if forward >= -5.0 and forward <= HAMMER_REACH and vertical_overlap:
+			fragile_broken[i] = true
+			break_effects[i] = BREAK_EFFECT_SECONDS
+			_mark_save_dirty()
 	queue_redraw()
 
 func _use_horn() -> void:
@@ -1043,6 +1090,24 @@ func _collect_combat_pickups() -> void:
 			horn_unlocked = true
 			horn_charges = HORN_MAX_CHARGES
 
+func _collect_secret_rewards() -> void:
+	for i in range(secret_rewards.size()):
+		# Nao entrega o premio sem ter quebrado o painel correspondente.
+		if i >= fragile_broken.size() or not fragile_broken[i] or secret_collected[i]:
+			continue
+		var reward: Vector2 = secret_rewards[i]
+		if absf(hero_pos.x - reward.x) > 19.0:
+			continue
+		if reward.y < hero_pos.y - _hero_collision_height() - 10.0 or reward.y > hero_pos.y + 10.0:
+			continue
+		secret_collected[i] = true
+		secret_count += 1
+		if i == 0:
+			health = mini(MAX_HEALTH, health + 1)
+		else:
+			lives = mini(SECRET_LIFE_LIMIT, lives + 1)
+		_mark_save_dirty()
+
 func _mark_save_dirty() -> void:
 	if not save_dirty:
 		save_delay = AUTOSAVE_INTERVAL
@@ -1072,6 +1137,8 @@ func _save_game() -> void:
 		"nano_pickups": _pack_flags(nano_pickup_collected),
 		"enemy_active": _pack_flags(enemy_active),
 		"lever_states": _pack_flags(lever_states),
+		"fragile_broken": _pack_flags(fragile_broken),
+		"secret_collected": _pack_flags(secret_collected),
 		"health": health,
 		"lives": lives,
 		"hammer_unlocked": hammer_unlocked,
@@ -1142,10 +1209,13 @@ func _load_game() -> void:
 	_load_flags(data, "nano_pickups", nano_pickup_collected)
 	_load_flags(data, "enemy_active", enemy_active)
 	_load_flags(data, "lever_states", lever_states)
+	_load_flags(data, "fragile_broken", fragile_broken)
+	_load_flags(data, "secret_collected", secret_collected)
+	secret_count = secret_collected.count(true)
 
 	medal_count = medal_collected.count(true)
 	health = clampi(int(data.get("health", MAX_HEALTH)), 1, MAX_HEALTH)
-	lives = clampi(int(data.get("lives", MAX_LIVES)), 0, MAX_LIVES)
+	lives = clampi(int(data.get("lives", MAX_LIVES)), 0, SECRET_LIFE_LIMIT)
 	hammer_unlocked = bool(data.get("hammer_unlocked", false))
 	horn_unlocked = bool(data.get("horn_unlocked", false))
 	horn_charges = clampi(int(data.get("horn_charges", 0)), 0, HORN_MAX_CHARGES)
@@ -1168,6 +1238,7 @@ func _exit_tree() -> void:
 func _update_level_progress() -> void:
 	_collect_combat_pickups()
 	_collect_nano_pickups()
+	_collect_secret_rewards()
 	# As medalhas sao opcionais, coletadas ao tocar no corpo do heroi.
 	# O progresso permanece quando ele cai e retorna ao checkpoint.
 	for i in range(medals.size()):
@@ -1219,6 +1290,12 @@ func _restart_stage() -> void:
 	for i in range(pickup_collected.size()):
 		pickup_collected[i] = false
 	puzzle_gate_open = false
+	secret_count = 0
+	for i in range(fragile_broken.size()):
+		fragile_broken[i] = false
+		break_effects[i] = 0.0
+	for i in range(secret_collected.size()):
+		secret_collected[i] = false
 	for i in range(lever_states.size()):
 		lever_states[i] = false
 	crates = Stage.crates()
@@ -1310,6 +1387,11 @@ func _draw() -> void:
 	_draw_lever_gate()
 	for lever_index in range(lever_points.size()):
 		_draw_lever(lever_index)
+	for i in range(fragile_walls.size()):
+		if not fragile_broken[i]:
+			_draw_fragile_wall(fragile_walls[i])
+		elif break_effects[i] > 0.0:
+			_draw_paper_debris(fragile_walls[i], break_effects[i])
 	for block in crates:
 		_draw_crate(block)
 	for beam in low_beams:
@@ -1323,6 +1405,9 @@ func _draw() -> void:
 	for i in range(medals.size()):
 		if not medal_collected[i]:
 			_draw_medal(medals[i])
+	for i in range(secret_rewards.size()):
+		if i < fragile_broken.size() and fragile_broken[i] and not secret_collected[i]:
+			_draw_secret_medal(secret_rewards[i])
 	for i in range(combat_pickups.size()):
 		if not pickup_collected[i]:
 			_draw_combat_pickup(combat_pickups[i])
@@ -1563,6 +1648,30 @@ func _draw_nano_pickup(pos: Vector2) -> void:
 	draw_rect(Rect2(pos.x - 3.0, pos.y - 6.0, 6.0, 9.0), Color("#8ac3a0"))
 	draw_line(pos + Vector2(-3.0, -2.0), pos + Vector2(3.0, -2.0), Color("#d7f2cc"), 2.0)
 
+func _draw_fragile_wall(wall: Rect2) -> void:
+	# Painel rachado, identificavel sem icones ou controles adicionais.
+	draw_rect(wall, Color("#493840"))
+	draw_rect(Rect2(wall.position + Vector2(2.0, 2.0), wall.size - Vector2(4.0, 4.0)), Color("#bd8d67"))
+	draw_line(wall.position + Vector2(5.0, 4.0), wall.position + Vector2(15.0, 18.0), Color("#694d4a"), 2.0)
+	draw_line(wall.position + Vector2(15.0, 18.0), wall.position + Vector2(8.0, 30.0), Color("#694d4a"), 2.0)
+	draw_line(wall.position + Vector2(8.0, 30.0), wall.position + Vector2(17.0, 40.0), Color("#694d4a"), 2.0)
+	draw_string(ThemeDB.fallback_font, wall.position + Vector2(-13.0, -8.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f0d09e"))
+
+func _draw_paper_debris(wall: Rect2, time_left: float) -> void:
+	var progress: float = 1.0 - time_left / BREAK_EFFECT_SECONDS
+	var center: Vector2 = wall.get_center()
+	for i in range(6):
+		var angle: float = float(i) * TAU / 6.0
+		var direction := Vector2(cos(angle), sin(angle))
+		var piece: Vector2 = center + direction * (5.0 + 29.0 * progress)
+		draw_rect(Rect2(piece.x - 3.0, piece.y - 2.0, 6.0, 4.0), Color("#cfaa83"))
+
+func _draw_secret_medal(pos: Vector2) -> void:
+	draw_circle(pos, 11.0, Color("#f6daa0"))
+	draw_circle(pos, 8.0, Color("#9b687e"))
+	draw_circle(pos, 5.0, Color("#f3de9e"))
+	draw_string(ThemeDB.fallback_font, pos + Vector2(-4.0, 4.0), "S", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#503746"))
+
 func _draw_combat_pickup(pickup: Vector3) -> void:
 	var pos := Vector2(pickup.x, pickup.y)
 	var kind: int = int(pickup.z)
@@ -1672,6 +1781,7 @@ func _draw_finish_screen() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(224.0, 187.0), score_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#f0e6ce"))
 	var defeated_count: int = enemy_active.count(false)
 	draw_string(ThemeDB.fallback_font, Vector2(211.0, 211.0), "INIMIGOS: %d / %d" % [defeated_count, enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0e6ce"))
+	draw_string(ThemeDB.fallback_font, Vector2(231.0, 256.0), "SEGREDOS: %d / %d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f5dbab"))
 	draw_string(ThemeDB.fallback_font, Vector2(199.0, 235.0), "PRIMEIRO EPISODIO COMPLETO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#e9c8a0"))
 	# A tela cobre o HUD, entao o reinicio precisa ficar visivel.
 	# A area coincide com o botao PULO, que continua acionando o reinicio.
@@ -1803,6 +1913,7 @@ func _draw_pause_inventory() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(122.0, 179.0), "CORNETA: %d CARGAS" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(122.0, 208.0), "NANICOLINA: %d USOS" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(340.0, 148.0), "MEDALHAS: %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#ead59d"))
+	draw_string(ThemeDB.fallback_font, Vector2(340.0, 236.0), "SEGREDOS: %d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f3d59d"))
 	draw_string(ThemeDB.fallback_font, Vector2(340.0, 179.0), "VIDAS: %d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f3e1ce"))
 	draw_string(ThemeDB.fallback_font, Vector2(340.0, 208.0), "CHECKPOINT: " + ("SIM" if checkpoint_active else "NAO"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c7dfcb"))
 	draw_rect(Rect2(140.0, 251.0, 166.0, 43.0), Color("#466856"))
@@ -1938,6 +2049,7 @@ func _draw_controls() -> void:
 	if checkpoint_active:
 		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
 	draw_string(ThemeDB.fallback_font, Vector2(504.0, 65.0), "ROBOS %d/%d" % [enemy_active.size() - enemy_active.count(false), enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e0bf9c"))
+	draw_string(ThemeDB.fallback_font, Vector2(397.0, 82.0), "SECRETOS %d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f3dca7"))
 	_draw_health_hud()
 	if ledge_hanging:
 		draw_string(ThemeDB.fallback_font, Vector2(181.0, 79.0), "BORDA: CIMA SOBE | BAIXO SOLTA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
