@@ -70,3 +70,22 @@ static func puzzle_gates() -> Array[Rect2]:
 	return [
 		Rect2(744.0, 169.0, 18.0, 131.0)
 	]
+
+# Seis medalhas opcionais distribuidas pelas rotas mais importantes da fase.
+static func medals() -> Array[Vector2]:
+	return [
+		Vector2(295.0, 220.0),
+		Vector2(500.0, 183.0),
+		Vector2(1105.0, 233.0),
+		Vector2(1335.0, 183.0),
+		Vector2(1880.0, 223.0),
+		Vector2(2155.0, 186.0)
+	]
+
+# Marco seguro no chao, apos o primeiro desafio e a primeira corda.
+static func checkpoint() -> Vector2:
+	return Vector2(1435.0, 300.0)
+
+# Porta de cenografia no final do mapa, para concluir a fase.
+static func exit_door() -> Rect2:
+	return Rect2(2312.0, 215.0, 49.0, 85.0)
