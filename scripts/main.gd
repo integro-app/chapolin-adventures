@@ -16,6 +16,8 @@ const STAND_HEIGHT := 101.0
 const CROUCH_HEIGHT := 83.0
 const CROUCH_SPEED := 92.0
 const CLIMB_SPEED := 90.0
+const DPAD_CENTER := Vector2(90.0, 297.0)
+const DPAD_RADIUS := 67.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -580,19 +582,30 @@ func _draw_chapolin() -> void:
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_controls() -> void:
-	# Mesmos botões e áreas de toque que já funcionam no Android.
-	draw_rect(Rect2(15.0, 310.0, 90.0, 38.0), Color("#263c53"))
-	draw_rect(Rect2(112.0, 310.0, 90.0, 38.0), Color("#263c53"))
-	# SUBIR e DESCER aparecem apenas quando o Chapolin chega a uma escada.
-	if _ladder_near(hero_pos.x, hero_pos.y).size.x > 0.0 or climbing:
-		draw_rect(Rect2(246.0, 310.0, 74.0, 38.0), Color("#53634d") if climb_up_held else Color("#344b49"))
-		draw_rect(Rect2(329.0, 310.0, 74.0, 38.0), Color("#53634d") if climb_down_held else Color("#344b49"))
-		draw_string(ThemeDB.fallback_font, Vector2(256.0, 334.0), "SUBIR", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
-		draw_string(ThemeDB.fallback_font, Vector2(335.0, 334.0), "DESCER", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+	# Direcional unico de quatro sentidos: os comandos nao mudam perto da escada.
+	# O desenho nao mexe no enquadramento do jogo ou nas artes do heroi.
+	draw_circle(DPAD_CENTER, DPAD_RADIUS, Color(0.08, 0.13, 0.19, 0.76))
+	var up_color := Color("#64795e") if climb_up_held else Color("#304354")
+	var down_color := Color("#64795e") if climb_down_held else Color("#304354")
+	var left_color := Color("#64795e") if move_axis < -0.1 else Color("#304354")
+	var right_color := Color("#64795e") if move_axis > 0.1 else Color("#304354")
+	draw_rect(Rect2(73.0, 244.0, 34.0, 35.0), up_color)
+	draw_rect(Rect2(73.0, 315.0, 34.0, 35.0), down_color)
+	draw_rect(Rect2(35.0, 279.0, 38.0, 36.0), left_color)
+	draw_rect(Rect2(107.0, 279.0, 38.0, 36.0), right_color)
+	draw_rect(Rect2(73.0, 279.0, 34.0, 36.0), Color("#283b4a"))
+
+	# Setas vetoriais para nao depender de caracteres especiais ou fontes.
+	var arrow_color := Color("#f1d9b5")
+	draw_colored_polygon(PackedVector2Array([Vector2(90.0, 250.0), Vector2(80.0, 266.0), Vector2(100.0, 266.0)]), arrow_color)
+	draw_colored_polygon(PackedVector2Array([Vector2(90.0, 344.0), Vector2(80.0, 328.0), Vector2(100.0, 328.0)]), arrow_color)
+	draw_colored_polygon(PackedVector2Array([Vector2(42.0, 297.0), Vector2(60.0, 288.0), Vector2(60.0, 306.0)]), arrow_color)
+	draw_colored_polygon(PackedVector2Array([Vector2(138.0, 297.0), Vector2(120.0, 288.0), Vector2(120.0, 306.0)]), arrow_color)
+	draw_circle(DPAD_CENTER, 8.0, Color("#d4b38b"))
+
+	# Acoes separadas a direita, preservando agachamento e pulo.
 	draw_rect(Rect2(414.0, 310.0, 110.0, 38.0), Color("#465344") if is_crouching else Color("#263c53"))
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
-	draw_string(ThemeDB.fallback_font, Vector2(30.0, 335.0), "ESQ", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(125.0, 335.0), "DIR", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(423.0, 334.0), "AGACHAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
@@ -619,21 +632,20 @@ func _input(event: InputEvent) -> void:
 
 func _control_at(pos: Vector2) -> String:
 	var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * pos
-	if screen_pos.y < 295.0 or screen_pos.y > 360.0:
-		return ""
-	if screen_pos.x < 108.0:
-		return "left"
-	if screen_pos.x >= 112.0 and screen_pos.x < 208.0:
-		return "right"
-	if _ladder_near(hero_pos.x, hero_pos.y).size.x > 0.0 or climbing:
-		if screen_pos.x >= 246.0 and screen_pos.x < 320.0:
-			return "up"
-		if screen_pos.x >= 329.0 and screen_pos.x < 403.0:
-			return "down"
-	if screen_pos.x >= 414.0 and screen_pos.x < 525.0:
-		return "crouch"
-	if screen_pos.x >= 535.0 and screen_pos.x <= 640.0:
-		return "jump"
+	# O polegar pode arrastar de uma direcao para outra sem levantar.
+	# Cima/baixo sempre sao detectados; so controlam escadas se houver proximidade.
+	if screen_pos.x >= 20.0 and screen_pos.x <= 160.0 and screen_pos.y >= 231.0 and screen_pos.y <= 359.0:
+		var offset := screen_pos - DPAD_CENTER
+		if offset.length() < 16.0 or offset.length() > DPAD_RADIUS + 6.0:
+			return ""
+		if absf(offset.x) > absf(offset.y):
+			return "right" if offset.x > 0.0 else "left"
+		return "down" if offset.y > 0.0 else "up"
+	if screen_pos.y >= 295.0 and screen_pos.y <= 360.0:
+		if screen_pos.x >= 414.0 and screen_pos.x < 525.0:
+			return "crouch"
+		if screen_pos.x >= 535.0 and screen_pos.x <= 640.0:
+			return "jump"
 	return ""
 
 func _sync_touch_controls() -> void:
