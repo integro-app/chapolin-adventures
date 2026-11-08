@@ -3,6 +3,9 @@ extends Node2D
 # Cenário de testes horizontal. Toda a arte oficial do Chapolin segue intacta.
 const Stage = preload("res://scripts/stage_test.gd")
 const SPEED := 190.0
+const RUN_SPEED := 290.0
+const RUN_DELAY := 0.48
+const RUN_FPS := 11.8
 const JUMP_SPEED := -350.0
 const GRAVITY := 900.0
 const IDLE_FPS := 4.35
@@ -14,6 +17,9 @@ var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
 var grounded := true
 var move_axis := 0.0
+var run_hold_time := 0.0
+var run_direction := 0
+var running := false
 var jump_requested := false
 var facing := 1
 var animation_time := 0.0
@@ -27,9 +33,12 @@ var raised_platforms: Array[Rect2] = []
 var crates: Array[Rect2] = []
 var idle_texture: Texture2D
 var walk_texture: Texture2D
+var run_texture: Texture2D
 var jump_texture: Texture2D
 
 func _ready() -> void:
+	# Pixel-art filtering prevents neighboring atlas pixels bleeding into frames.
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ground_segments = Stage.ground()
 	raised_platforms = Stage.platforms()
 	crates = Stage.crates()
@@ -39,6 +48,8 @@ func _ready() -> void:
 		idle_texture = load("res://assets/chapolin_idle.png")
 	if ResourceLoader.exists("res://assets/chapolin/walk.png"):
 		walk_texture = load("res://assets/chapolin/walk.png")
+	if ResourceLoader.exists("res://assets/chapolin/run.png"):
+		run_texture = load("res://assets/chapolin/run.png")
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
 	queue_redraw()
@@ -47,9 +58,17 @@ func _physics_process(delta: float) -> void:
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
 		axis = move_axis
+	var direction := 0
 	if absf(axis) > 0.1:
-		facing = 1 if axis > 0.0 else -1
-	hero_pos.x = _move_x_with_crates(axis * SPEED * delta)
+		direction = 1 if axis > 0.0 else -1
+		facing = direction
+	if direction == 0 or direction != run_direction or not grounded:
+		run_hold_time = 0.0
+	else:
+		run_hold_time += delta
+	run_direction = direction
+	running = direction != 0 and grounded and run_hold_time >= RUN_DELAY and run_texture != null
+	hero_pos.x = _move_x_with_crates(axis * (RUN_SPEED if running else SPEED) * delta)
 
 	var was_grounded := grounded
 	var is_jumping := (Input.is_action_just_pressed("ui_accept") or jump_requested) and grounded
@@ -96,6 +115,8 @@ func _physics_process(delta: float) -> void:
 		desired = "jump"
 	elif landing_timer > 0.0 and jump_texture != null:
 		desired = "land"
+	elif running:
+		desired = "run"
 	elif absf(axis) > 0.1:
 		desired = "walk"
 
@@ -158,6 +179,9 @@ func _respawn() -> void:
 	vertical_speed = 0.0
 	grounded = true
 	move_axis = 0.0
+	running = false
+	run_hold_time = 0.0
+	run_direction = 0
 	jump_requested = false
 	air_time = 0.0
 	landing_timer = 0.0
@@ -187,7 +211,7 @@ func _draw() -> void:
 		_draw_crate(block)
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
-	draw_set_transform(hero_pos - Vector2(camera_x, 0.0), 0.0, Vector2(float(facing), 1.0))
+	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
 	_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_controls()
@@ -372,6 +396,8 @@ func _draw_chapolin() -> void:
 	var sprite: Texture2D = idle_texture
 	if current_animation == "walk" and walk_texture != null:
 		sprite = walk_texture
+	elif current_animation == "run" and run_texture != null:
+		sprite = run_texture
 	elif (current_animation == "jump" or current_animation == "land") and jump_texture != null:
 		sprite = jump_texture
 
@@ -396,14 +422,18 @@ func _draw_chapolin() -> void:
 	elif current_animation == "land" and jump_texture != null:
 		frame = 6 if landing_timer > 0.08 else 7
 	else:
-		var fps := WALK_FPS if current_animation == "walk" and walk_texture != null else IDLE_FPS
+		var fps := IDLE_FPS
+		if current_animation == "walk" and walk_texture != null:
+			fps = WALK_FPS
+		elif current_animation == "run" and run_texture != null:
+			fps = RUN_FPS
 		frame = int(floor(animation_time * fps)) % 8
 	var frame_size := Vector2(float(sprite.get_width()) / 8.0, float(sprite.get_height()))
 	var region := Rect2(float(frame) * frame_size.x, 0.0, frame_size.x, frame_size.y)
 	var drawn_height := 101.0
 	var drawn_width := frame_size.x * drawn_height / frame_size.y
 	var dest := Rect2(-drawn_width / 2.0, -drawn_height, drawn_width, drawn_height)
-	draw_texture_rect_region(sprite, dest, region)
+	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_controls() -> void:
 	# Mesmos botões e áreas de toque que já funcionam no Android.
