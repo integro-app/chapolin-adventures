@@ -56,6 +56,13 @@ const NANO_TUNNEL_MARGIN := 0.5
 const SAVE_PATH := "user://chapolin_save_v1.json"
 const SAVE_VERSION := 1
 const AUTOSAVE_INTERVAL := 0.8
+const LEDGE_HANG_DEPTH := 74.0
+const LEDGE_HANG_SIDE_OFFSET := 14.0
+const LEDGE_GRAB_X_TOLERANCE := 22.0
+const LEDGE_GRAB_Y_MIN := 2.0
+const LEDGE_GRAB_Y_MAX := 83.0
+const LEDGE_CLIMB_SECONDS := 0.30
+const LEDGE_RELEASE_DELAY := 0.55
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -77,6 +84,15 @@ var rope_angular_velocity := 0.0
 var rope_release_vx := 0.0
 var rope_regrab_delay := 0.0
 var climb_ladder := Rect2()
+var ledge_hanging := false
+var ledge_climbing := false
+var ledge_edge := Vector2.ZERO
+var ledge_side := 1
+var ledge_cooldown := 0.0
+var ledge_blocked_edge := Vector2(-1000.0, -1000.0)
+var ledge_climb_elapsed := 0.0
+var ledge_climb_from := Vector2.ZERO
+var ledge_climb_to := Vector2.ZERO
 var crouch_held := false
 var is_crouching := false
 var joystick_touch_id := -1
@@ -206,6 +222,12 @@ func _physics_process(delta: float) -> void:
 	hazard_clock += delta
 	_update_enemy_patrols(delta)
 	rope_regrab_delay = maxf(0.0, rope_regrab_delay - delta)
+	ledge_cooldown = maxf(0.0, ledge_cooldown - delta)
+	if ledge_hanging or ledge_climbing:
+		_handle_ledge(delta)
+		if not _check_threat_collisions(previous_foot_y):
+			_update_level_progress()
+		return
 	if _handle_rope(delta):
 		if not _check_threat_collisions(previous_foot_y):
 			_update_level_progress()
@@ -272,6 +294,12 @@ func _physics_process(delta: float) -> void:
 				hero_pos.y = next_y
 		else:
 			hero_pos.y = next_y
+
+	# Captura a borda durante a queda, antes de aplicar os eventos do pouso.
+	if _try_grab_ledge():
+		if not _check_threat_collisions(previous_foot_y):
+			_update_level_progress()
+		return
 
 	if grounded:
 		if not was_grounded:
@@ -402,6 +430,111 @@ func _handle_rope(delta: float) -> bool:
 		facing = 1 if axis > 0.0 else -1
 	_update_climb_visuals(delta, "rope")
 	return true
+
+func _ledge_destination_is_clear(destination: Vector2) -> bool:
+	# Nao coloca o Chapolin dentro de uma viga, caixa ou grade.
+	var bounds := Rect2(destination.x - HERO_HALF_WIDTH, destination.y - STAND_HEIGHT, HERO_HALF_WIDTH * 2.0, STAND_HEIGHT - 1.0)
+	for beam in low_beams + nano_tunnels:
+		if bounds.intersects(beam):
+			return false
+	for block in crates:
+		if bounds.intersects(block):
+			return false
+	if not puzzle_gate_open:
+		for gate in puzzle_gates:
+			if bounds.intersects(gate):
+				return false
+	return true
+
+func _try_grab_ledge() -> bool:
+	# So agarra em queda. A Nanicolina, escadas e cordas mantem prioridade.
+	if grounded or vertical_speed < 0.0 or _nano_active() or swinging or climbing or ledge_cooldown > 0.0:
+		return false
+	for surface in raised_platforms + crates:
+		var top: float = surface.position.y
+		var feet_drop: float = hero_pos.y - top
+		if feet_drop < LEDGE_GRAB_Y_MIN or feet_drop > LEDGE_GRAB_Y_MAX:
+			continue
+		for side in [1, -1]:
+			var edge_x: float = surface.position.x if side == 1 else surface.end.x
+			var target_x: float = edge_x - float(side) * LEDGE_HANG_SIDE_OFFSET
+			if absf(hero_pos.x - target_x) > LEDGE_GRAB_X_TOLERANCE:
+				continue
+			var candidate_edge := Vector2(edge_x, top)
+			if candidate_edge.distance_to(ledge_blocked_edge) < 2.0:
+				continue
+			var landing_x: float = edge_x + float(side) * (HERO_HALF_WIDTH + 6.0)
+			var landing := Vector2(landing_x, top)
+			if not _ledge_destination_is_clear(landing):
+				continue
+			ledge_hanging = true
+			ledge_climbing = false
+			ledge_edge = candidate_edge
+			ledge_side = side
+			hero_pos = candidate_edge + Vector2(-float(side) * LEDGE_HANG_SIDE_OFFSET, LEDGE_HANG_DEPTH)
+			facing = side
+			grounded = false
+			vertical_speed = 0.0
+			rope_release_vx = 0.0
+			damage_knockback_vx = 0.0
+			running = false
+			is_crouching = false
+			jump_requested = false
+			run_hold_time = 0.0
+			air_time = 0.0
+			_update_climb_visuals(0.0, "ledge")
+			return true
+	return false
+
+func _handle_ledge(delta: float) -> void:
+	if ledge_climbing:
+		ledge_climb_elapsed += delta
+		var fraction: float = clampf(ledge_climb_elapsed / LEDGE_CLIMB_SECONDS, 0.0, 1.0)
+		var eased: float = fraction * fraction * (3.0 - 2.0 * fraction)
+		hero_pos = ledge_climb_from.lerp(ledge_climb_to, eased)
+		if fraction >= 1.0:
+			ledge_climbing = false
+			grounded = true
+			vertical_speed = 0.0
+			landing_timer = 0.10
+			ledge_cooldown = LEDGE_RELEASE_DELAY
+			_update_climb_visuals(delta, "idle")
+		else:
+			_update_climb_visuals(delta, "ledge_climb")
+		return
+
+	if not ledge_hanging:
+		return
+	var up: bool = climb_up_held or Input.is_action_pressed("ui_up")
+	var down: bool = climb_down_held or Input.is_action_pressed("ui_down")
+	if up or Input.is_action_just_pressed("ui_accept") or jump_requested:
+		var landing_x: float = ledge_edge.x + float(ledge_side) * (HERO_HALF_WIDTH + 6.0)
+		var landing := Vector2(landing_x, ledge_edge.y)
+		jump_requested = false
+		if _ledge_destination_is_clear(landing):
+			ledge_hanging = false
+			ledge_climbing = true
+			ledge_climb_elapsed = 0.0
+			ledge_climb_from = hero_pos
+			ledge_climb_to = landing
+			_handle_ledge(delta)
+			return
+	elif down:
+		ledge_hanging = false
+		ledge_blocked_edge = ledge_edge
+		ledge_cooldown = LEDGE_RELEASE_DELAY
+		vertical_speed = 38.0
+		grounded = false
+		air_time = 0.0
+		_update_climb_visuals(delta, "fall")
+		return
+
+	# Permanece imovel na borda sem gastar tempo da corda ou do pulo.
+	hero_pos = ledge_edge + Vector2(-float(ledge_side) * LEDGE_HANG_SIDE_OFFSET, LEDGE_HANG_DEPTH)
+	grounded = false
+	vertical_speed = 0.0
+	facing = ledge_side
+	_update_climb_visuals(delta, "ledge")
 
 func _ladder_near(x: float, y: float) -> Rect2:
 	for ladder in ladders:
@@ -666,6 +799,8 @@ func _take_damage(source_x: float) -> void:
 		_lose_life()
 		return
 	# Protecao e recuo apenas quando ainda ha coracoes.
+	ledge_hanging = false
+	ledge_climbing = false
 	hurt_grace = DAMAGE_GRACE
 	damage_knockback_vx = -DAMAGE_KNOCKBACK if hero_pos.x < source_x else DAMAGE_KNOCKBACK
 	vertical_speed = DAMAGE_RECOIL_UP
@@ -687,6 +822,8 @@ func _lose_life() -> void:
 	_mark_save_dirty()
 	damage_knockback_vx = 0.0
 	if lives == 0:
+		ledge_hanging = false
+		ledge_climbing = false
 		game_over = true
 		running = false
 		swinging = false
@@ -1017,6 +1154,13 @@ func _respawn() -> void:
 	rope_regrab_delay = 0.0
 	climbing = false
 	climb_ladder = Rect2()
+	ledge_hanging = false
+	ledge_climbing = false
+	ledge_edge = Vector2.ZERO
+	ledge_side = 1
+	ledge_cooldown = 0.0
+	ledge_blocked_edge = Vector2(-1000.0, -1000.0)
+	ledge_climb_elapsed = 0.0
 	climb_up_held = false
 	climb_down_held = false
 	is_crouching = false
@@ -1083,6 +1227,8 @@ func _draw() -> void:
 		_draw_respawn_shield()
 	if hammer_swing_time > 0.0:
 		_draw_hammer_swing()
+	if ledge_hanging:
+		_draw_ledge_grip()
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	var hero_scale: float = NANO_SCALE if _nano_active() else 1.0
@@ -1485,7 +1631,7 @@ func _draw_chapolin() -> void:
 		sprite = walk_texture
 	elif current_animation == "run" and run_texture != null:
 		sprite = run_texture
-	elif (current_animation == "jump" or current_animation == "land" or current_animation == "crouch" or current_animation == "rope") and jump_texture != null:
+	elif (current_animation == "jump" or current_animation == "land" or current_animation == "crouch" or current_animation == "rope" or current_animation == "ledge" or current_animation == "ledge_climb") and jump_texture != null:
 		sprite = jump_texture
 
 	if sprite == null:
@@ -1511,9 +1657,11 @@ func _draw_chapolin() -> void:
 	elif current_animation == "crouch" and jump_texture != null:
 		# Reuses the already-approved crouched preparation pose in the jump atlas.
 		frame = 1
-	elif current_animation == "rope" and jump_texture != null:
-		# Pose do salto existente: sem alterar o desenho oficial.
+	elif (current_animation == "rope" or current_animation == "ledge") and jump_texture != null:
+		# Reutiliza pose ja existente enquanto agarra corda ou borda.
 		frame = 3
+	elif current_animation == "ledge_climb" and jump_texture != null:
+		frame = 2
 	else:
 		var fps := IDLE_FPS
 		if current_animation == "walk" and walk_texture != null:
@@ -1548,6 +1696,11 @@ func _draw_pause_inventory() -> void:
 	draw_rect(Rect2(332.0, 251.0, 166.0, 43.0), Color("#84604b"))
 	draw_string(ThemeDB.fallback_font, Vector2(177.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(357.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
+
+func _draw_ledge_grip() -> void:
+	# Marcador discreto do ponto onde as maos seguram o canto.
+	draw_circle(ledge_edge, 4.0, Color("#f3d5a4"))
+	draw_line(ledge_edge + Vector2(-6.0, 0.0), ledge_edge + Vector2(6.0, 0.0), Color("#f3d5a4"), 2.0)
 
 func _draw_health_hud() -> void:
 	# Tres coracoes indicam resistencia; vidas sao tentativas inteiras.
@@ -1613,6 +1766,8 @@ func _draw_controls() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
 	draw_string(ThemeDB.fallback_font, Vector2(504.0, 65.0), "ROBOS %d/%d" % [enemy_active.size() - enemy_active.count(false), enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e0bf9c"))
 	_draw_health_hud()
+	if ledge_hanging:
+		draw_string(ThemeDB.fallback_font, Vector2(181.0, 79.0), "BORDA: CIMA SOBE | BAIXO SOLTA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
 	if not stage_complete and not game_over:
 		draw_rect(Rect2(551.0, 89.0, 76.0, 29.0), Color("#304052"))
 		draw_string(ThemeDB.fallback_font, Vector2(559.0, 108.0), "PAUSA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f0dbc4"))
