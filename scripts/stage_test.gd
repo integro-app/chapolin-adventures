@@ -127,3 +127,12 @@ static func nano_tunnels() -> Array[Rect2]:
 	return [
 		Rect2(1342.0, 244.0, 68.0, 20.0)
 	]
+
+# Apenas estas bordas podem ser agarradas: (x da borda, y do topo, lado).
+# lado 1 = a plataforma fica a direita do Chapolin; -1 = a esquerda.
+# Escolhidas longe das cordas, escadas, caixas e tunel da Nanicolina.
+static func ledge_grab_points() -> Array[Vector3]:
+	return [
+		Vector3(447.0, 212.0, 1.0),
+		Vector3(1225.0, 214.0, 1.0)
+	]
