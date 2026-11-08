@@ -259,10 +259,10 @@ func _draw_near_buildings() -> void:
 
 		# Porta sem profundidade; moldura com madeira aparente na lateral.
 		var door_x := x + 125.0
-		draw_rect(Rect2(door_x - 5.0, top + 54.0, 58.0, 138.0 - top), Color("#493b45"))
-		draw_rect(Rect2(door_x, top + 60.0, 48.0, 131.0 - top), Color("#65464a"))
-		draw_rect(Rect2(door_x + 7.0, top + 69.0, 34.0, 110.0 - top), Color("#88604f"))
-		draw_circle(Vector2(door_x + 36.0, 178.0), 2.0, Color("#f0d8a7"))
+		draw_rect(Rect2(door_x - 5.0, 205.0, 58.0, 87.0), Color("#493b45"))
+		draw_rect(Rect2(door_x, 211.0, 48.0, 81.0), Color("#65464a"))
+		draw_rect(Rect2(door_x + 7.0, 220.0, 34.0, 64.0), Color("#88604f"))
+		draw_circle(Vector2(door_x + 36.0, 259.0), 2.0, Color("#f0d8a7"))
 		draw_rect(Rect2(x + 4.0, 288.0, 186.0, 5.0), Color("#715057"))
 
 		# Por tras do painel: escoras e parafusos da cenografia.
