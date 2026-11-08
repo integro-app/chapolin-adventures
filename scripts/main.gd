@@ -48,6 +48,11 @@ const HORN_STUN_SECONDS := 3.5
 const HORN_COOLDOWN := 0.6
 const HORN_MAX_CHARGES := 3
 const HORN_EFFECT_DURATION := 0.32
+const NANO_SCALE := 0.34
+const NANO_DURATION := 9.0
+const NANO_MAX_CHARGES := 3
+const NANO_SPEED := 155.0
+const NANO_TUNNEL_MARGIN := 0.5
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -118,6 +123,12 @@ var horn_effect_time := 0.0
 var horn_blast_origin := Vector2.ZERO
 var horn_blast_facing := 1
 var enemy_stun: Array[float] = []
+var nano_pickups: Array[Vector2] = []
+var nano_pickup_collected: Array[bool] = []
+var nano_tunnels: Array[Rect2] = []
+var nano_unlocked := false
+var nano_charges := 0
+var nano_remaining := 0.0
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -145,6 +156,10 @@ func _ready() -> void:
 	combat_pickups = Stage.combat_pickups()
 	for _pickup in combat_pickups:
 		pickup_collected.append(false)
+	nano_pickups = Stage.nano_pickups()
+	nano_tunnels = Stage.nano_tunnels()
+	for _nano_pickup in nano_pickups:
+		nano_pickup_collected.append(false)
 	_reset_enemies()
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
@@ -166,6 +181,7 @@ func _physics_process(delta: float) -> void:
 		queue_redraw()
 		return
 	var previous_foot_y: float = hero_pos.y
+	_update_nano_timer(delta)
 	hammer_cooldown = maxf(0.0, hammer_cooldown - delta)
 	hammer_swing_time = maxf(0.0, hammer_swing_time - delta)
 	horn_cooldown = maxf(0.0, horn_cooldown - delta)
@@ -189,16 +205,16 @@ func _physics_process(delta: float) -> void:
 	if absf(axis) > 0.1:
 		direction = 1 if axis > 0.0 else -1
 		facing = direction
-	# Crouch lowers the physical collision profile without stretching an art frame.
+	# Agachamento continua normal; a Nanicolina substitui a altura de colisao.
 	var wants_crouch := crouch_held or (Input.is_action_pressed("ui_down") and _ladder_near(hero_pos.x, hero_pos.y).size.x == 0.0)
-	is_crouching = grounded and (wants_crouch or _under_low_beam(hero_pos.x, hero_pos.y))
+	is_crouching = grounded and not _nano_active() and (wants_crouch or _under_low_beam(hero_pos.x, hero_pos.y))
 	if direction == 0 or direction != run_direction or not grounded or is_crouching:
 		run_hold_time = 0.0
 	else:
 		run_hold_time += delta
 	run_direction = direction
 	running = direction != 0 and grounded and not is_crouching and run_hold_time >= RUN_DELAY and run_texture != null
-	var move_speed := CROUCH_SPEED if is_crouching else (RUN_SPEED if running else SPEED)
+	var move_speed := NANO_SPEED if _nano_active() else (CROUCH_SPEED if is_crouching else (RUN_SPEED if running else SPEED))
 	var travel := axis * move_speed * delta
 	if not grounded and absf(rope_release_vx) > 0.1:
 		# Preserva a velocidade do pendulo depois do salto; o joystick so faz
@@ -512,40 +528,41 @@ func _try_push_crate(crate_index: int, delta_x: float) -> bool:
 	return true
 
 func _move_x_with_crates(distance: float) -> float:
-	var next_x: float = clampf(hero_pos.x + distance, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
+	var half_width: float = _hero_collision_half_width()
+	var next_x: float = clampf(hero_pos.x + distance, half_width, Stage.WORLD_WIDTH - half_width)
 	for i in range(crates.size()):
 		var block: Rect2 = crates[i]
 		# Continua permitindo subir e aterrissar no topo das caixas.
-		if hero_pos.y <= block.position.y + 4.0 or hero_pos.y - 75.0 >= block.end.y:
+		if hero_pos.y <= block.position.y + 4.0 or hero_pos.y - _hero_collision_height() >= block.end.y:
 			continue
-		if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= block.position.x + 0.001 and next_x + HERO_HALF_WIDTH > block.position.x:
-			var push_right: float = next_x + HERO_HALF_WIDTH - block.position.x
+		if distance > 0.0 and hero_pos.x + half_width <= block.position.x + 0.001 and next_x + half_width > block.position.x:
+			var push_right: float = next_x + half_width - block.position.x
 			if not _try_push_crate(i, push_right):
-				next_x = block.position.x - HERO_HALF_WIDTH
-		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= block.end.x - 0.001 and next_x - HERO_HALF_WIDTH < block.end.x:
-			var push_left: float = next_x - HERO_HALF_WIDTH - block.end.x
+				next_x = block.position.x - half_width
+		elif distance < 0.0 and hero_pos.x - half_width >= block.end.x - 0.001 and next_x - half_width < block.end.x:
+			var push_left: float = next_x - half_width - block.end.x
 			if not _try_push_crate(i, push_left):
-				next_x = block.end.x + HERO_HALF_WIDTH
+				next_x = block.end.x + half_width
 
-	# Barreiras baixas seguem respeitando a altura do agachamento.
-	var head_y: float = hero_pos.y - (CROUCH_HEIGHT if is_crouching else STAND_HEIGHT)
-	for beam in low_beams:
-		if head_y >= beam.end.y or hero_pos.y <= beam.position.y:
+	# Obstaculos superiores usam a altura real: normal, agachado ou nano.
+	var head_y: float = hero_pos.y - _hero_collision_height()
+	for beam in low_beams + nano_tunnels:
+		if head_y >= beam.end.y - NANO_TUNNEL_MARGIN or hero_pos.y <= beam.position.y:
 			continue
-		if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= beam.position.x and next_x + HERO_HALF_WIDTH > beam.position.x:
-			next_x = beam.position.x - HERO_HALF_WIDTH
-		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= beam.end.x and next_x - HERO_HALF_WIDTH < beam.end.x:
-			next_x = beam.end.x + HERO_HALF_WIDTH
+		if distance > 0.0 and hero_pos.x + half_width <= beam.position.x and next_x + half_width > beam.position.x:
+			next_x = beam.position.x - half_width
+		elif distance < 0.0 and hero_pos.x - half_width >= beam.end.x and next_x - half_width < beam.end.x:
+			next_x = beam.end.x + half_width
 
 	# A grade e solida ate a caixa ativar a placa de pressao.
 	if not puzzle_gate_open:
 		for gate in puzzle_gates:
 			if head_y >= gate.end.y or hero_pos.y <= gate.position.y:
 				continue
-			if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= gate.position.x and next_x + HERO_HALF_WIDTH > gate.position.x:
-				next_x = gate.position.x - HERO_HALF_WIDTH
-			elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= gate.end.x and next_x - HERO_HALF_WIDTH < gate.end.x:
-				next_x = gate.end.x + HERO_HALF_WIDTH
+			if distance > 0.0 and hero_pos.x + half_width <= gate.position.x and next_x + half_width > gate.position.x:
+				next_x = gate.position.x - half_width
+			elif distance < 0.0 and hero_pos.x - half_width >= gate.end.x and next_x - half_width < gate.end.x:
+				next_x = gate.end.x + half_width
 	return next_x
 
 func _reset_enemies() -> void:
@@ -588,8 +605,9 @@ func _obstacle_position(obstacle: Vector3, index: int) -> Vector2:
 func _check_threat_collisions(previous_foot_y: float) -> bool:
 	if hurt_grace > 0.0 or stage_complete:
 		return false
-	var hero_height: float = CROUCH_HEIGHT if is_crouching else STAND_HEIGHT
-	var hero_box := Rect2(hero_pos.x - HERO_HALF_WIDTH, hero_pos.y - hero_height, HERO_HALF_WIDTH * 2.0, hero_height)
+	var hero_height: float = _hero_collision_height()
+	var hero_width: float = _hero_collision_half_width()
+	var hero_box := Rect2(hero_pos.x - hero_width, hero_pos.y - hero_height, hero_width * 2.0, hero_height)
 	for i in range(enemy_positions.size()):
 		if not enemy_active[i]:
 			continue
@@ -659,6 +677,54 @@ func _lose_life() -> void:
 		_respawn()
 	queue_redraw()
 
+func _nano_active() -> bool:
+	return nano_remaining > 0.0
+
+func _hero_collision_height() -> float:
+	if _nano_active():
+		return STAND_HEIGHT * NANO_SCALE
+	return CROUCH_HEIGHT if is_crouching else STAND_HEIGHT
+
+func _hero_collision_half_width() -> float:
+	return HERO_HALF_WIDTH * NANO_SCALE if _nano_active() else HERO_HALF_WIDTH
+
+func _inside_nano_passage() -> bool:
+	# So mantem o efeito ativo enquanto o personagem esta abaixo do telhado.
+	for tunnel in nano_tunnels:
+		if hero_pos.y > tunnel.end.y and hero_pos.x + HERO_HALF_WIDTH > tunnel.position.x and hero_pos.x - HERO_HALF_WIDTH < tunnel.end.x:
+			return true
+	return false
+
+func _update_nano_timer(delta: float) -> void:
+	if nano_remaining <= 0.0:
+		return
+	nano_remaining = maxf(0.0, nano_remaining - delta)
+	if nano_remaining <= 0.0 and _inside_nano_passage():
+		# Evita crescer dentro da passagem e travar a movimentacao.
+		nano_remaining = 0.12
+
+func _use_nano() -> void:
+	if game_over or stage_complete or not nano_unlocked or nano_charges <= 0 or _nano_active():
+		return
+	if swinging or climbing:
+		return
+	nano_charges -= 1
+	nano_remaining = NANO_DURATION
+	is_crouching = false
+	running = false
+	run_hold_time = 0.0
+	queue_redraw()
+
+func _collect_nano_pickups() -> void:
+	for i in range(nano_pickups.size()):
+		if nano_pickup_collected[i]:
+			continue
+		var pickup: Vector2 = nano_pickups[i]
+		if absf(hero_pos.x - pickup.x) <= 24.0 and pickup.y >= hero_pos.y - _hero_collision_height() - 10.0 and pickup.y <= hero_pos.y + 10.0:
+			nano_pickup_collected[i] = true
+			nano_unlocked = true
+			nano_charges = NANO_MAX_CHARGES
+
 func _use_hammer() -> void:
 	if stage_complete or game_over or not hammer_unlocked or hammer_cooldown > 0.0:
 		return
@@ -716,6 +782,7 @@ func _collect_combat_pickups() -> void:
 
 func _update_level_progress() -> void:
 	_collect_combat_pickups()
+	_collect_nano_pickups()
 	# As medalhas sao opcionais, coletadas ao tocar no corpo do heroi.
 	# O progresso permanece quando ele cai e retorna ao checkpoint.
 	for i in range(medals.size()):
@@ -748,6 +815,11 @@ func _restart_stage() -> void:
 	lives = MAX_LIVES
 	game_over = false
 	damage_knockback_vx = 0.0
+	nano_unlocked = false
+	nano_charges = 0
+	nano_remaining = 0.0
+	for i in range(nano_pickup_collected.size()):
+		nano_pickup_collected[i] = false
 	hammer_unlocked = false
 	horn_unlocked = false
 	horn_charges = 0
@@ -777,6 +849,7 @@ func _restart_stage() -> void:
 
 func _respawn() -> void:
 	hero_pos = respawn_point
+	nano_remaining = 0.0
 	hurt_grace = DAMAGE_GRACE
 	damage_knockback_vx = 0.0
 	vertical_speed = 0.0
@@ -834,6 +907,8 @@ func _draw() -> void:
 		_draw_crate(block)
 	for beam in low_beams:
 		_draw_low_beam(beam)
+	for tunnel in nano_tunnels:
+		_draw_nano_tunnel(tunnel)
 	for rope in ropes:
 		_draw_rope(rope)
 	_draw_checkpoint()
@@ -844,6 +919,9 @@ func _draw() -> void:
 	for i in range(combat_pickups.size()):
 		if not pickup_collected[i]:
 			_draw_combat_pickup(combat_pickups[i])
+	for i in range(nano_pickups.size()):
+		if not nano_pickup_collected[i]:
+			_draw_nano_pickup(nano_pickups[i])
 	if horn_effect_time > 0.0:
 		_draw_horn_wave()
 	for i in range(enemy_positions.size()):
@@ -857,7 +935,8 @@ func _draw() -> void:
 		_draw_hammer_swing()
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
-	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
+	var hero_scale: float = NANO_SCALE if _nano_active() else 1.0
+	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing) * hero_scale, hero_scale))
 	# Pisca durante a invulnerabilidade sem alterar os sprites oficiais.
 	if hurt_grace <= 0.0 or int(hurt_grace * 14.0) % 2 == 0:
 		_draw_chapolin()
@@ -1056,6 +1135,22 @@ func _draw_puzzle_gate(gate: Rect2) -> void:
 		draw_line(Vector2(gate.position.x, gate.position.y + 40.0), Vector2(gate.end.x, gate.position.y + 40.0), Color("#76564c"), 5.0)
 	var light := Color("#7fca8b") if puzzle_gate_open else Color("#e2a26d")
 	draw_circle(Vector2(gate.position.x + gate.size.x / 2.0, gate.position.y - 10.0), 5.0, light)
+
+func _draw_nano_tunnel(tunnel: Rect2) -> void:
+	# Pequena passagem por baixo do painel, deixando apenas 36px de altura.
+	draw_rect(tunnel, Color("#49363a"))
+	draw_rect(Rect2(tunnel.position.x + 3.0, tunnel.position.y + 2.0, tunnel.size.x - 6.0, tunnel.size.y - 5.0), Color("#bd926d"))
+	draw_line(Vector2(tunnel.position.x, tunnel.end.y - 2.0), Vector2(tunnel.end.x, tunnel.end.y - 2.0), Color("#f0c79d"), 3.0)
+	draw_line(tunnel.position + Vector2(5.0, 2.0), tunnel.end - Vector2(5.0, 2.0), Color("#795356"), 2.0)
+	draw_string(ThemeDB.fallback_font, Vector2(tunnel.position.x + 3.0, tunnel.position.y - 8.0), "NANICOLINA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#ffe7ae"))
+
+func _draw_nano_pickup(pos: Vector2) -> void:
+	draw_circle(pos + Vector2(1.0, 2.0), 13.0, Color("#443841"))
+	draw_circle(pos, 11.0, Color("#c6d99c"))
+	draw_circle(pos, 8.0, Color("#547d5c"))
+	draw_rect(Rect2(pos.x - 4.0, pos.y - 8.0, 8.0, 16.0), Color("#eee8b0"))
+	draw_rect(Rect2(pos.x - 3.0, pos.y - 6.0, 6.0, 9.0), Color("#8ac3a0"))
+	draw_line(pos + Vector2(-3.0, -2.0), pos + Vector2(3.0, -2.0), Color("#d7f2cc"), 2.0)
 
 func _draw_combat_pickup(pickup: Vector3) -> void:
 	var pos := Vector2(pickup.x, pickup.y)
@@ -1336,6 +1431,10 @@ func _draw_controls() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(438.0, 334.0), "CORNETA %d" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	var nano_color := Color("#6c9973") if _nano_active() else (Color("#496551") if nano_unlocked and nano_charges > 0 else Color("#283540"))
+	draw_rect(Rect2(535.0, 261.0, 90.0, 37.0), nano_color)
+	var nano_label := "NANO %ds" % int(ceil(nano_remaining)) if _nano_active() else "NANO %d" % nano_charges
+	draw_string(ThemeDB.fallback_font, Vector2(543.0, 284.0), nano_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
 	var puzzle_text := "GRADE ABERTA!" if puzzle_gate_open else "DESAFIO: EMPURRE A CAIXA ATE A PLACA"
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 47.0), puzzle_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e9d1ac"))
@@ -1383,7 +1482,9 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 		_use_hammer()
 	elif pos.x >= 429.0 and pos.x <= 528.0 and pos.y >= 295.0 and pos.y <= 360.0:
 		_use_horn()
-	elif pos.x >= 535.0 and pos.x <= 640.0 and pos.y >= 285.0 and pos.y <= 360.0:
+	elif pos.x >= 535.0 and pos.x <= 640.0 and pos.y >= 255.0 and pos.y < 300.0:
+		_use_nano()
+	elif pos.x >= 535.0 and pos.x <= 640.0 and pos.y >= 300.0 and pos.y <= 360.0:
 		# Keep PULO independent from the joystick finger.
 		jump_requested = true
 
