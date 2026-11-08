@@ -67,6 +67,9 @@ var camera_x := 0.0
 var ground_segments: Array[Rect2] = []
 var raised_platforms: Array[Rect2] = []
 var crates: Array[Rect2] = []
+var pressure_plates: Array[Rect2] = []
+var puzzle_gates: Array[Rect2] = []
+var puzzle_gate_open := false
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -81,6 +84,8 @@ func _ready() -> void:
 	ground_segments = Stage.ground()
 	raised_platforms = Stage.platforms()
 	crates = Stage.crates()
+	pressure_plates = Stage.pressure_plates()
+	puzzle_gates = Stage.puzzle_gates()
 	low_beams = Stage.low_beams()
 	ladders = Stage.ladders()
 	ropes = Stage.ropes()
@@ -378,18 +383,63 @@ func _under_low_beam(x: float, y: float) -> bool:
 				return true
 	return false
 
+func _is_plate_pressed() -> bool:
+	# A caixa precisa apoiar uma porcao significativa sobre a placa.
+	for plate in pressure_plates:
+		for block in crates:
+			var horizontal_overlap: float = maxf(0.0, minf(block.end.x, plate.end.x) - maxf(block.position.x, plate.position.x))
+			if horizontal_overlap >= block.size.x * 0.40 and absf(block.end.y - plate.end.y) < 3.0:
+				return true
+	return false
+
+func _try_push_crate(crate_index: int, delta_x: float) -> bool:
+	# Empurra com o joystick, somente em terra firme e sem mover outra caixa.
+	if not grounded or absf(delta_x) < 0.0001:
+		return false
+	var block: Rect2 = crates[crate_index]
+	var next_block: Rect2 = Rect2(block.position + Vector2(delta_x, 0.0), block.size)
+	if next_block.position.x < 0.0 or next_block.end.x > Stage.WORLD_WIDTH:
+		return false
+	# Nao deixa a caixa flutuar nem cair em um vao irreversivel.
+	var supported := false
+	for ground_surface in ground_segments:
+		if absf(block.end.y - ground_surface.position.y) <= 2.0:
+			if next_block.position.x >= ground_surface.position.x and next_block.end.x <= ground_surface.end.x:
+				supported = true
+				break
+	if not supported:
+		return false
+	for i in range(crates.size()):
+		if i != crate_index and next_block.intersects(crates[i]):
+			return false
+	if not puzzle_gate_open:
+		for gate in puzzle_gates:
+			if next_block.intersects(gate):
+				return false
+	crates[crate_index] = next_block
+	if _is_plate_pressed():
+		# Primeiro desafio: a grade permanece aberta depois da ativacao.
+		puzzle_gate_open = true
+	return true
+
 func _move_x_with_crates(distance: float) -> float:
-	var next_x := clampf(hero_pos.x + distance, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
-	for block in crates:
-		# Caixas são sólidas nas laterais e podem ser usadas como plataformas.
+	var next_x: float = clampf(hero_pos.x + distance, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
+	for i in range(crates.size()):
+		var block: Rect2 = crates[i]
+		# Continua permitindo subir e aterrissar no topo das caixas.
 		if hero_pos.y <= block.position.y + 4.0 or hero_pos.y - 75.0 >= block.end.y:
 			continue
-		if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= block.position.x and next_x + HERO_HALF_WIDTH > block.position.x:
-			next_x = block.position.x - HERO_HALF_WIDTH
-		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= block.end.x and next_x - HERO_HALF_WIDTH < block.end.x:
-			next_x = block.end.x + HERO_HALF_WIDTH
-	# Overhead barriers stop upright movement, but a crouched hero passes below.
-	var head_y := hero_pos.y - (CROUCH_HEIGHT if is_crouching else STAND_HEIGHT)
+		if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= block.position.x + 0.001 and next_x + HERO_HALF_WIDTH > block.position.x:
+			var push_right: float = next_x + HERO_HALF_WIDTH - block.position.x
+			if not _try_push_crate(i, push_right):
+				next_x = block.position.x - HERO_HALF_WIDTH
+		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= block.end.x - 0.001 and next_x - HERO_HALF_WIDTH < block.end.x:
+			var push_left: float = next_x - HERO_HALF_WIDTH - block.end.x
+			if not _try_push_crate(i, push_left):
+				next_x = block.end.x + HERO_HALF_WIDTH
+
+	# Barreiras baixas seguem respeitando a altura do agachamento.
+	var head_y: float = hero_pos.y - (CROUCH_HEIGHT if is_crouching else STAND_HEIGHT)
 	for beam in low_beams:
 		if head_y >= beam.end.y or hero_pos.y <= beam.position.y:
 			continue
@@ -397,6 +447,16 @@ func _move_x_with_crates(distance: float) -> float:
 			next_x = beam.position.x - HERO_HALF_WIDTH
 		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= beam.end.x and next_x - HERO_HALF_WIDTH < beam.end.x:
 			next_x = beam.end.x + HERO_HALF_WIDTH
+
+	# A grade e solida ate a caixa ativar a placa de pressao.
+	if not puzzle_gate_open:
+		for gate in puzzle_gates:
+			if head_y >= gate.end.y or hero_pos.y <= gate.position.y:
+				continue
+			if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= gate.position.x and next_x + HERO_HALF_WIDTH > gate.position.x:
+				next_x = gate.position.x - HERO_HALF_WIDTH
+			elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= gate.end.x and next_x - HERO_HALF_WIDTH < gate.end.x:
+				next_x = gate.end.x + HERO_HALF_WIDTH
 	return next_x
 
 func _respawn() -> void:
@@ -448,6 +508,10 @@ func _draw() -> void:
 		_draw_stone(surface, true)
 	for surface in raised_platforms:
 		_draw_stone(surface, false)
+	for plate in pressure_plates:
+		_draw_pressure_plate(plate)
+	for gate in puzzle_gates:
+		_draw_puzzle_gate(gate)
 	for block in crates:
 		_draw_crate(block)
 	for beam in low_beams:
@@ -627,6 +691,29 @@ func _draw_stone(surface: Rect2, is_floor: bool) -> void:
 	if not is_floor:
 		draw_rect(Rect2(surface.position.x + 5.0, surface.end.y - 5.0, surface.size.x - 10.0, 4.0), Color("#453636"))
 
+func _draw_pressure_plate(plate: Rect2) -> void:
+	var pressed := _is_plate_pressed()
+	var plate_color := Color("#79bc83") if pressed else Color("#d8a75a")
+	draw_rect(Rect2(plate.position.x - 3.0, plate.position.y + 1.0, plate.size.x + 6.0, 5.0), Color("#4b3940"))
+	draw_rect(plate, plate_color)
+	draw_line(Vector2(plate.position.x, plate.position.y), Vector2(plate.end.x, plate.position.y), Color("#f9e5b7"), 2.0)
+	draw_circle(Vector2(plate.position.x + 5.0, plate.position.y), 2.0, plate_color)
+	draw_circle(Vector2(plate.end.x - 5.0, plate.position.y), 2.0, plate_color)
+
+func _draw_puzzle_gate(gate: Rect2) -> void:
+	# Grade de bastidor: o arco fica visivel quando o mecanismo e liberado.
+	draw_rect(Rect2(gate.position.x - 4.0, gate.position.y - 5.0, gate.size.x + 8.0, 8.0), Color("#4c3433"))
+	draw_rect(Rect2(gate.position.x - 4.0, gate.position.y - 5.0, 5.0, gate.size.y + 5.0), Color("#856650"))
+	draw_rect(Rect2(gate.end.x - 1.0, gate.position.y - 5.0, 5.0, gate.size.y + 5.0), Color("#856650"))
+	if not puzzle_gate_open:
+		draw_rect(Rect2(gate.position.x, gate.position.y, gate.size.x, gate.size.y), Color("#513a39"))
+		for i in range(3):
+			var bar_x := gate.position.x + 3.0 + float(i) * 6.0
+			draw_line(Vector2(bar_x, gate.position.y + 2.0), Vector2(bar_x, gate.end.y), Color("#baa27e"), 3.0)
+		draw_line(Vector2(gate.position.x, gate.position.y + 40.0), Vector2(gate.end.x, gate.position.y + 40.0), Color("#76564c"), 5.0)
+	var light := Color("#7fca8b") if puzzle_gate_open else Color("#e2a26d")
+	draw_circle(Vector2(gate.position.x + gate.size.x / 2.0, gate.position.y - 10.0), 5.0, light)
+
 func _draw_crate(block: Rect2) -> void:
 	# Caixa cenografica com travessas, pregos e etiqueta de inventario.
 	draw_rect(block, Color("#5a3b31"))
@@ -754,6 +841,8 @@ func _draw_controls() -> void:
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
+	var puzzle_text := "GRADE ABERTA!" if puzzle_gate_open else "DESAFIO: EMPURRE A CAIXA ATE A PLACA"
+	draw_string(ThemeDB.fallback_font, Vector2(15.0, 47.0), puzzle_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e9d1ac"))
 
 func _input(event: InputEvent) -> void:
 	# Android editor can deliver touch events or mouse events emulated from touch.
