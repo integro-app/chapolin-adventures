@@ -58,7 +58,7 @@ const SAVE_VERSION := 1
 const AUTOSAVE_INTERVAL := 0.8
 const LEDGE_HANG_DEPTH := 74.0
 const LEDGE_HANG_SIDE_OFFSET := 14.0
-const LEDGE_GRAB_X_TOLERANCE := 22.0
+const LEDGE_GRAB_X_TOLERANCE := 14.0
 const LEDGE_GRAB_Y_MIN := 2.0
 const LEDGE_GRAB_Y_MAX := 83.0
 const LEDGE_CLIMB_SECONDS := 0.30
@@ -87,6 +87,7 @@ var climb_ladder := Rect2()
 var ledge_hanging := false
 var ledge_climbing := false
 var ledge_edge := Vector2.ZERO
+var ledge_grab_points: Array[Vector3] = []
 var ledge_side := 1
 var ledge_cooldown := 0.0
 var ledge_blocked_edge := Vector2(-1000.0, -1000.0)
@@ -165,6 +166,7 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ground_segments = Stage.ground()
 	raised_platforms = Stage.platforms()
+	ledge_grab_points = Stage.ledge_grab_points()
 	crates = Stage.crates()
 	pressure_plates = Stage.pressure_plates()
 	puzzle_gates = Stage.puzzle_gates()
@@ -451,43 +453,46 @@ func _ledge_destination_is_clear(destination: Vector2) -> bool:
 	return true
 
 func _try_grab_ledge() -> bool:
-	# So agarra em queda. A Nanicolina, escadas e cordas mantem prioridade.
-	if grounded or vertical_speed < 0.0 or _nano_active() or swinging or climbing or ledge_cooldown > 0.0:
+	# Somente bordas autorizadas pela fase; caixas comuns nao oferecem apoio.
+	# Mantem a captura automatica enquanto cai, mas so se estiver voltado
+	# para a borda sinalizada. Evita agarramentos a todo instante.
+	if grounded or vertical_speed <= 0.0 or _nano_active() or swinging or climbing or ledge_cooldown > 0.0:
 		return false
-	for surface in raised_platforms + crates:
-		var top: float = surface.position.y
+	for grip in ledge_grab_points:
+		var edge_x: float = grip.x
+		var top: float = grip.y
+		var side: int = int(grip.z)
+		if facing != side:
+			continue
 		var feet_drop: float = hero_pos.y - top
 		if feet_drop < LEDGE_GRAB_Y_MIN or feet_drop > LEDGE_GRAB_Y_MAX:
 			continue
-		for side in [1, -1]:
-			var edge_x: float = surface.position.x if side == 1 else surface.end.x
-			var target_x: float = edge_x - float(side) * LEDGE_HANG_SIDE_OFFSET
-			if absf(hero_pos.x - target_x) > LEDGE_GRAB_X_TOLERANCE:
-				continue
-			var candidate_edge := Vector2(edge_x, top)
-			if candidate_edge.distance_to(ledge_blocked_edge) < 2.0:
-				continue
-			var landing_x: float = edge_x + float(side) * (HERO_HALF_WIDTH + 6.0)
-			var landing := Vector2(landing_x, top)
-			if not _ledge_destination_is_clear(landing):
-				continue
-			ledge_hanging = true
-			ledge_climbing = false
-			ledge_edge = candidate_edge
-			ledge_side = side
-			hero_pos = candidate_edge + Vector2(-float(side) * LEDGE_HANG_SIDE_OFFSET, LEDGE_HANG_DEPTH)
-			facing = side
-			grounded = false
-			vertical_speed = 0.0
-			rope_release_vx = 0.0
-			damage_knockback_vx = 0.0
-			running = false
-			is_crouching = false
-			jump_requested = false
-			run_hold_time = 0.0
-			air_time = 0.0
-			_update_climb_visuals(0.0, "ledge")
-			return true
+		var target_x: float = edge_x - float(side) * LEDGE_HANG_SIDE_OFFSET
+		if absf(hero_pos.x - target_x) > LEDGE_GRAB_X_TOLERANCE:
+			continue
+		var candidate_edge := Vector2(edge_x, top)
+		if candidate_edge.distance_to(ledge_blocked_edge) < 2.0:
+			continue
+		var landing_x: float = edge_x + float(side) * (HERO_HALF_WIDTH + 6.0)
+		var landing := Vector2(landing_x, top)
+		if not _ledge_destination_is_clear(landing):
+			continue
+		ledge_hanging = true
+		ledge_climbing = false
+		ledge_edge = candidate_edge
+		ledge_side = side
+		hero_pos = candidate_edge + Vector2(-float(side) * LEDGE_HANG_SIDE_OFFSET, LEDGE_HANG_DEPTH)
+		grounded = false
+		vertical_speed = 0.0
+		rope_release_vx = 0.0
+		damage_knockback_vx = 0.0
+		running = false
+		is_crouching = false
+		jump_requested = false
+		run_hold_time = 0.0
+		air_time = 0.0
+		_update_climb_visuals(0.0, "ledge")
+		return true
 	return false
 
 func _handle_ledge(delta: float) -> void:
@@ -1197,6 +1202,7 @@ func _draw() -> void:
 		_draw_stone(surface, true)
 	for surface in raised_platforms:
 		_draw_stone(surface, false)
+	_draw_ledge_grab_markers()
 	for plate in pressure_plates:
 		_draw_pressure_plate(plate)
 	for gate in puzzle_gates:
@@ -1700,6 +1706,14 @@ func _draw_pause_inventory() -> void:
 	draw_rect(Rect2(332.0, 251.0, 166.0, 43.0), Color("#84604b"))
 	draw_string(ThemeDB.fallback_font, Vector2(177.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(357.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
+
+func _draw_ledge_grab_markers() -> void:
+	# Pequenas marcacoes douradas mostram em quais cantos e possivel agarrar.
+	for grip in ledge_grab_points:
+		var corner := Vector2(grip.x, grip.y)
+		var side: float = float(int(grip.z))
+		draw_line(corner, corner + Vector2(side * 15.0, 0.0), Color("#eac58d"), 3.0)
+		draw_circle(corner + Vector2(side * 5.0, -2.0), 2.0, Color("#f8e1ae"))
 
 func _draw_ledge_grip() -> void:
 	# Marcador discreto do ponto onde as maos seguram o canto.
