@@ -223,6 +223,10 @@ func _physics_process(delta: float) -> void:
 	_update_enemy_patrols(delta)
 	rope_regrab_delay = maxf(0.0, rope_regrab_delay - delta)
 	ledge_cooldown = maxf(0.0, ledge_cooldown - delta)
+	# Depois de soltar, so libera a mesma borda quando o heroi se afasta.
+	if ledge_blocked_edge.x > -900.0:
+		if grounded or absf(hero_pos.x - ledge_blocked_edge.x) > LEDGE_GRAB_X_TOLERANCE + LEDGE_HANG_SIDE_OFFSET + 12.0 or hero_pos.y > ledge_blocked_edge.y + LEDGE_HANG_DEPTH + 35.0:
+			ledge_blocked_edge = Vector2(-1000.0, -1000.0)
 	if ledge_hanging or ledge_climbing:
 		_handle_ledge(delta)
 		if not _check_threat_collisions(previous_foot_y):
