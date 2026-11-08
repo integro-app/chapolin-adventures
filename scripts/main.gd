@@ -35,7 +35,11 @@ const ENEMY_HALF_WIDTH := 13.0
 const ENEMY_HEIGHT := 27.0
 const ENEMY_STOMP_BOUNCE := -245.0
 const OBSTACLE_RADIUS := 14.0
-const DAMAGE_GRACE := 1.0
+const DAMAGE_GRACE := 1.5
+const MAX_HEALTH := 3
+const MAX_LIVES := 3
+const DAMAGE_KNOCKBACK := 185.0
+const DAMAGE_RECOIL_UP := -160.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -90,6 +94,10 @@ var enemy_active: Array[bool] = []
 var moving_obstacles: Array[Vector3] = []
 var hazard_clock := 0.0
 var hurt_grace := 0.0
+var health := MAX_HEALTH
+var lives := MAX_LIVES
+var game_over := false
+var damage_knockback_vx := 0.0
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -128,7 +136,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
-	if stage_complete:
+	if stage_complete or game_over:
 		if Input.is_action_just_pressed("ui_accept") or jump_requested:
 			_restart_stage()
 		jump_requested = false
@@ -172,6 +180,10 @@ func _physics_process(delta: float) -> void:
 		rope_release_vx = move_toward(rope_release_vx, 0.0, ROPE_AIR_MOMENTUM_DRAG * delta)
 	elif grounded:
 		rope_release_vx = 0.0
+	if absf(damage_knockback_vx) > 0.1:
+		# Um golpe recua o heroi por pouco tempo; depois o joystick retoma.
+		travel = damage_knockback_vx * delta
+		damage_knockback_vx = move_toward(damage_knockback_vx, 0.0, 600.0 * delta)
 	hero_pos.x = _move_x_with_crates(travel)
 
 	var was_grounded := grounded
@@ -210,9 +222,11 @@ func _physics_process(delta: float) -> void:
 	else:
 		air_time += delta
 
-	# Quedas nos vãos retornam ao começo do trecho de testes.
+	# Cair num vao consome uma vida (sem apagar o checkpoint ou medalhas).
 	if hero_pos.y > 435.0:
-		_respawn()
+		_lose_life()
+		queue_redraw()
+		return
 
 	if _check_threat_collisions(previous_foot_y):
 		queue_redraw()
@@ -552,8 +566,8 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 		var enemy_box := Rect2(enemy_pos.x - ENEMY_HALF_WIDTH, enemy_top, ENEMY_HALF_WIDTH * 2.0, ENEMY_HEIGHT)
 		if not hero_box.intersects(enemy_box):
 			continue
-		# Ao cair de cima, o heroi vence o inimigo e ganha um pequeno rebote.
-		# Uma aproximacao lateral faz retornar ao ultimo checkpoint.
+		# Ao cair de cima, vence o inimigo e ganha rebote.
+		# A colisao lateral tira um coracao e provoca recuo.
 		if previous_foot_y <= enemy_top + 6.0 and hero_pos.y > previous_foot_y + 0.1:
 			enemy_active[i] = false
 			hero_pos.y = enemy_top - 3.0
@@ -562,15 +576,53 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 			air_time = 0.0
 			landing_timer = 0.0
 			return false
-		_respawn()
+		_take_damage(enemy_pos.x)
 		return true
 	for i in range(moving_obstacles.size()):
 		var center: Vector2 = _obstacle_position(moving_obstacles[i], i)
 		var obstacle_box := Rect2(center.x - OBSTACLE_RADIUS, center.y - OBSTACLE_RADIUS, OBSTACLE_RADIUS * 2.0, OBSTACLE_RADIUS * 2.0)
 		if hero_box.intersects(obstacle_box):
-			_respawn()
+			_take_damage(center.x)
 			return true
 	return false
+
+func _take_damage(source_x: float) -> void:
+	if hurt_grace > 0.0 or game_over or stage_complete:
+		return
+	health -= 1
+	if health <= 0:
+		_lose_life()
+		return
+	# Protecao e recuo apenas quando ainda ha coracoes.
+	hurt_grace = DAMAGE_GRACE
+	damage_knockback_vx = -DAMAGE_KNOCKBACK if hero_pos.x < source_x else DAMAGE_KNOCKBACK
+	vertical_speed = DAMAGE_RECOIL_UP
+	grounded = false
+	swinging = false
+	climbing = false
+	rope_release_vx = 0.0
+	running = false
+	is_crouching = false
+	run_hold_time = 0.0
+	landing_timer = 0.0
+	air_time = 0.0
+	jump_requested = false
+	queue_redraw()
+
+func _lose_life() -> void:
+	lives = maxi(0, lives - 1)
+	health = MAX_HEALTH
+	damage_knockback_vx = 0.0
+	if lives == 0:
+		game_over = true
+		running = false
+		swinging = false
+		climbing = false
+		vertical_speed = 0.0
+		_release_joystick()
+	else:
+		_respawn()
+	queue_redraw()
 
 func _update_level_progress() -> void:
 	# As medalhas sao opcionais, coletadas ao tocar no corpo do heroi.
@@ -600,7 +652,11 @@ func _update_level_progress() -> void:
 				jump_requested = false
 
 func _restart_stage() -> void:
-	# Recomeca a fase inteira. Respawn por queda nao chama este reset.
+	# Recomeca a fase inteira; cair ou levar dano nao apaga o progresso.
+	health = MAX_HEALTH
+	lives = MAX_LIVES
+	game_over = false
+	damage_knockback_vx = 0.0
 	puzzle_gate_open = false
 	crates = Stage.crates()
 	checkpoint_active = false
@@ -622,6 +678,7 @@ func _restart_stage() -> void:
 func _respawn() -> void:
 	hero_pos = respawn_point
 	hurt_grace = DAMAGE_GRACE
+	damage_knockback_vx = 0.0
 	vertical_speed = 0.0
 	grounded = true
 	move_axis = 0.0
@@ -694,11 +751,15 @@ func _draw() -> void:
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
-	_draw_chapolin()
+	# Pisca durante a invulnerabilidade sem alterar os sprites oficiais.
+	if hurt_grace <= 0.0 or int(hurt_grace * 14.0) % 2 == 0:
+		_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_controls()
 	if stage_complete:
 		_draw_finish_screen()
+	elif game_over:
+		_draw_game_over()
 
 func _draw_far_buildings() -> void:
 	# Fundo de pano pintado, preso por ganchos e emendas visiveis.
@@ -916,7 +977,7 @@ func _draw_rolling_obstacle(center: Vector2) -> void:
 	draw_circle(center, 2.0, Color("#efcb9b"))
 
 func _draw_respawn_shield() -> void:
-	# Aviso discreto de protecao temporaria apos voltar ao checkpoint.
+	# Escudo temporario apos dano ou retorno ao checkpoint.
 	draw_arc(hero_pos + Vector2(0.0, -48.0), 31.0, 0.0, TAU, 32, Color(0.95, 0.84, 0.59, 0.42), 2.0)
 
 func _draw_medal(world_pos: Vector2) -> void:
@@ -1077,6 +1138,33 @@ func _draw_chapolin() -> void:
 		dest.position.y += 4.0
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
+func _draw_health_hud() -> void:
+	# Tres coracoes indicam resistencia; vidas sao tentativas inteiras.
+	for i in range(MAX_HEALTH):
+		var x: float = 15.0 + float(i) * 25.0
+		var y: float = 64.0
+		var heart_color := Color("#d44f55") if i < health else Color("#483f47")
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x + 2.0, y + 5.0), Vector2(x + 6.0, y + 1.0),
+			Vector2(x + 11.0, y + 2.0), Vector2(x + 13.0, y + 5.0),
+			Vector2(x + 16.0, y + 2.0), Vector2(x + 21.0, y + 1.0),
+			Vector2(x + 24.0, y + 5.0), Vector2(x + 24.0, y + 11.0),
+			Vector2(x + 13.0, y + 21.0), Vector2(x + 2.0, y + 11.0)
+		]), heart_color)
+	draw_string(ThemeDB.fallback_font, Vector2(98.0, 80.0), "VIDAS: %d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f2ddbc"))
+
+func _draw_game_over() -> void:
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.07, 0.06, 0.10, 0.87))
+	draw_rect(Rect2(112.0, 95.0, 416.0, 180.0), Color("#372c38"))
+	draw_rect(Rect2(120.0, 103.0, 400.0, 164.0), Color("#65454b"))
+	draw_string(ThemeDB.fallback_font, Vector2(196.0, 150.0), "FIM DE JOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, Color("#f1d09b"))
+	draw_string(ThemeDB.fallback_font, Vector2(174.0, 190.0), "O CHAPOLIN TENTA NOVAMENTE!", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f4e5cc"))
+	draw_string(ThemeDB.fallback_font, Vector2(206.0, 230.0), "APERTE PULO PARA REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f4d8b0"))
+	# Coincide com a area real do botao PULO no celular.
+	draw_rect(Rect2(509.0, 298.0, 120.0, 51.0), Color("#b78351"))
+	draw_rect(Rect2(514.0, 302.0, 110.0, 43.0), Color("#634b40"))
+	draw_string(ThemeDB.fallback_font, Vector2(519.0, 329.0), "REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+
 func _draw_controls() -> void:
 	# O joystick so aparece enquanto um dedo toca a metade esquerda da tela.
 	# Diagonal para baixo + lateral = caminhar agachado, sem botao dedicado.
@@ -1099,6 +1187,7 @@ func _draw_controls() -> void:
 	if checkpoint_active:
 		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
 	draw_string(ThemeDB.fallback_font, Vector2(504.0, 65.0), "ROBOS %d/%d" % [enemy_active.size() - enemy_active.count(false), enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e0bf9c"))
+	_draw_health_hud()
 
 func _input(event: InputEvent) -> void:
 	# Android editor can deliver touch events or mouse events emulated from touch.
