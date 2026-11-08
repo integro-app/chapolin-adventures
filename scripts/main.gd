@@ -68,7 +68,7 @@ const LEVER_HEIGHT_REACH := 58.0
 const SECRET_LIFE_LIMIT := 5
 const BREAK_EFFECT_SECONDS := 0.42
 const STORY_SKIP_RECT := Rect2(63.0, 278.0, 157.0, 48.0)
-const STORY_NEXT_RECT := Rect2(403.0, 278.0, 169.0, 48.0
+const STORY_NEXT_RECT := Rect2(403.0, 278.0, 169.0, 48.0)
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
