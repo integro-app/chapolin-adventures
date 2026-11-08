@@ -109,6 +109,9 @@ var camera_x := 0.0
 
 var ground_segments: Array[Rect2] = []
 var raised_platforms: Array[Rect2] = []
+var moving_platform_specs: Array[Dictionary] = []
+var moving_platform_rects: Array[Rect2] = []
+var moving_platform_directions: Array[float] = []
 var crates: Array[Rect2] = []
 var pressure_plates: Array[Rect2] = []
 var puzzle_gates: Array[Rect2] = []
@@ -166,6 +169,8 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ground_segments = Stage.ground()
 	raised_platforms = Stage.platforms()
+	moving_platform_specs = Stage.moving_platforms()
+	_setup_moving_platforms()
 	ledge_grab_points = Stage.ledge_grab_points()
 	crates = Stage.crates()
 	pressure_plates = Stage.pressure_plates()
@@ -222,6 +227,7 @@ func _physics_process(delta: float) -> void:
 	horn_effect_time = maxf(0.0, horn_effect_time - delta)
 	hurt_grace = maxf(0.0, hurt_grace - delta)
 	hazard_clock += delta
+	_advance_moving_platforms(delta)
 	_update_enemy_patrols(delta)
 	rope_regrab_delay = maxf(0.0, rope_regrab_delay - delta)
 	ledge_cooldown = maxf(0.0, ledge_cooldown - delta)
@@ -545,6 +551,39 @@ func _handle_ledge(delta: float) -> void:
 	facing = ledge_side
 	_update_climb_visuals(delta, "ledge")
 
+func _setup_moving_platforms() -> void:
+	moving_platform_rects.clear()
+	moving_platform_directions.clear()
+	for spec in moving_platform_specs:
+		var start_x: float = float(spec["min_x"])
+		var top_y: float = float(spec["y"])
+		var width: float = float(spec["width"])
+		moving_platform_rects.append(Rect2(start_x, top_y, width, 14.0))
+		moving_platform_directions.append(1.0)
+
+func _advance_moving_platforms(delta: float) -> void:
+	# Translada o Chapolin junto com a plataforma em que ele esta apoiado.
+	# Nao altera a velocidade do pulo nem exige novo botao no celular.
+	for i in range(moving_platform_rects.size()):
+		var spec: Dictionary = moving_platform_specs[i]
+		var platform: Rect2 = moving_platform_rects[i]
+		var carried: bool = grounded and _on_surface(hero_pos.x, hero_pos.y, platform)
+		var direction: float = moving_platform_directions[i]
+		var limit_left: float = float(spec["min_x"])
+		var limit_right: float = float(spec["max_x"])
+		var next_x: float = platform.position.x + direction * float(spec["speed"]) * delta
+		if next_x >= limit_right:
+			next_x = limit_right
+			direction = -1.0
+		elif next_x <= limit_left:
+			next_x = limit_left
+			direction = 1.0
+		var displacement: float = next_x - platform.position.x
+		moving_platform_rects[i] = Rect2(next_x, platform.position.y, platform.size.x, platform.size.y)
+		moving_platform_directions[i] = direction
+		if carried and absf(displacement) > 0.0001:
+			hero_pos.x = _move_x_with_crates(displacement)
+
 func _ladder_near(x: float, y: float) -> Rect2:
 	for ladder in ladders:
 		var ladder_center := ladder.position.x + ladder.size.x / 2.0
@@ -617,6 +656,9 @@ func _has_support(x: float, y: float) -> bool:
 	for surface in crates:
 		if _on_surface(x, y, surface):
 			return true
+	for surface in moving_platform_rects:
+		if _on_surface(x, y, surface):
+			return true
 	return false
 
 func _on_surface(x: float, y: float, surface: Rect2) -> bool:
@@ -631,6 +673,9 @@ func _find_landing_surface(from_y: float, to_y: float, x: float) -> float:
 		if _crosses_top(from_y, to_y, x, surface):
 			landing = minf(landing, surface.position.y)
 	for surface in crates:
+		if _crosses_top(from_y, to_y, x, surface):
+			landing = minf(landing, surface.position.y)
+	for surface in moving_platform_rects:
 		if _crosses_top(from_y, to_y, x, surface):
 			landing = minf(landing, surface.position.y)
 	return landing
@@ -1132,6 +1177,7 @@ func _restart_stage() -> void:
 	finish_medals = 0
 	medal_count = 0
 	hazard_clock = 0.0
+	_setup_moving_platforms()
 	_reset_enemies()
 	for i in range(medal_collected.size()):
 		medal_collected[i] = false
@@ -1202,6 +1248,8 @@ func _draw() -> void:
 		_draw_stone(surface, true)
 	for surface in raised_platforms:
 		_draw_stone(surface, false)
+	for i in range(moving_platform_rects.size()):
+		_draw_moving_platform(moving_platform_rects[i], moving_platform_specs[i])
 	_draw_ledge_grab_markers()
 	for plate in pressure_plates:
 		_draw_pressure_plate(plate)
@@ -1706,6 +1754,22 @@ func _draw_pause_inventory() -> void:
 	draw_rect(Rect2(332.0, 251.0, 166.0, 43.0), Color("#84604b"))
 	draw_string(ThemeDB.fallback_font, Vector2(177.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(357.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
+
+func _draw_moving_platform(platform: Rect2, spec: Dictionary) -> void:
+	# Trilho de estúdio com uma plataforma deslizante de madeira e ferro.
+	var min_center: float = float(spec["min_x"]) + platform.size.x * 0.5
+	var max_center: float = float(spec["max_x"]) + platform.size.x * 0.5
+	var rail_y: float = platform.position.y - 29.0
+	draw_line(Vector2(min_center, rail_y), Vector2(max_center, rail_y), Color("#4a4145"), 5.0)
+	draw_line(Vector2(min_center, rail_y - 2.0), Vector2(max_center, rail_y - 2.0), Color("#b9a082"), 2.0)
+	var center_x: float = platform.position.x + platform.size.x * 0.5
+	draw_line(Vector2(center_x, rail_y), Vector2(center_x, platform.position.y), Color("#b9a082"), 3.0)
+	draw_rect(platform, Color("#443841"))
+	draw_rect(Rect2(platform.position.x + 3.0, platform.position.y + 2.0, platform.size.x - 6.0, platform.size.y - 5.0), Color("#ad7a58"))
+	draw_line(platform.position + Vector2(3.0, 2.0), Vector2(platform.end.x - 3.0, platform.position.y + 2.0), Color("#e5bf8b"), 2.0)
+	for i in range(3):
+		var bolt_x: float = platform.position.x + 10.0 + float(i) * (platform.size.x - 20.0) / 2.0
+		draw_circle(Vector2(bolt_x, platform.position.y + 8.0), 1.5, Color("#564449"))
 
 func _draw_ledge_grab_markers() -> void:
 	# Pequenas marcacoes douradas mostram em quais cantos e possivel agarrar.
