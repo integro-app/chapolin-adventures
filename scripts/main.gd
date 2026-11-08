@@ -217,7 +217,7 @@ func _handle_rope(delta: float) -> bool:
 		# Soltar sem "teleportar": preserva impulso tangencial e inicia queda.
 		swinging = false
 		rope_regrab_delay = 0.6
-		rope_release_vx = clampf(rope_angular_velocity * rope_length * cosf(rope_angle), -280.0, 280.0)
+		rope_release_vx = clampf(rope_angular_velocity * rope_length * cos(rope_angle), -280.0, 280.0)
 		vertical_speed = -155.0
 		grounded = false
 		air_time = 0.0
@@ -228,7 +228,7 @@ func _handle_rope(delta: float) -> bool:
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
 		axis = move_axis
-	rope_angular_velocity += (-sinf(rope_angle) * 5.0 + axis * ROPE_SWING_ACCEL) * delta
+	rope_angular_velocity += (-sin(rope_angle) * 5.0 + axis * ROPE_SWING_ACCEL) * delta
 	rope_angular_velocity *= maxf(0.0, 1.0 - 1.1 * delta)
 	rope_angle += rope_angular_velocity * delta
 	if rope_angle >= ROPE_MAX_ANGLE:
@@ -237,7 +237,7 @@ func _handle_rope(delta: float) -> bool:
 	elif rope_angle <= -ROPE_MAX_ANGLE:
 		rope_angle = -ROPE_MAX_ANGLE
 		rope_angular_velocity = maxf(0.0, rope_angular_velocity)
-	hero_pos = rope_anchor + Vector2(sinf(rope_angle), cosf(rope_angle)) * rope_length + Vector2(0.0, ROPE_FOOT_OFFSET)
+	hero_pos = rope_anchor + Vector2(sin(rope_angle), cos(rope_angle)) * rope_length + Vector2(0.0, ROPE_FOOT_OFFSET)
 	hero_pos.x = clampf(hero_pos.x, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
 	vertical_speed = 0.0
 	air_time = 0.0
@@ -608,7 +608,7 @@ func _draw_rope(rope: Vector3) -> void:
 	var top := Vector2(rope.x, rope.y)
 	var end_point := Vector2(rope.x, rope.y + rope.z)
 	if swinging and absf(rope_anchor.x - rope.x) < 1.0:
-		end_point = rope_anchor + Vector2(sinf(rope_angle), cosf(rope_angle)) * rope_length
+		end_point = rope_anchor + Vector2(sin(rope_angle), cos(rope_angle)) * rope_length
 	# Cabo de cenario sustentado no teto, com cordame e no inferior.
 	draw_line(Vector2(rope.x, 20.0), top, Color("#3f3235"), 2.0)
 	draw_rect(Rect2(rope.x - 9.0, rope.y - 5.0, 18.0, 9.0), Color("#6d524b"))
