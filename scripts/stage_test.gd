@@ -89,3 +89,19 @@ static func checkpoint() -> Vector2:
 # Porta de cenografia no final do mapa, para concluir a fase.
 static func exit_door() -> Rect2:
 	return Rect2(2312.0, 215.0, 49.0, 85.0)
+
+# Figurantes mecanicos de papelao: (inicio do patrulhamento, fim, piso).
+# Nunca cruzam os vaos nem iniciam no checkpoint.
+static func enemy_patrols() -> Array[Vector3]:
+	return [
+		Vector3(910.0, 970.0, 300.0),
+		Vector3(1815.0, 1890.0, 300.0),
+		Vector3(2208.0, 2270.0, 300.0)
+	]
+
+# Rolos de cenografia se movimentam sobre o piso, de um lado para o outro.
+static func moving_obstacles() -> Array[Vector3]:
+	return [
+		Vector3(1140.0, 1205.0, 300.0),
+		Vector3(1980.0, 2045.0, 300.0)
+	]
