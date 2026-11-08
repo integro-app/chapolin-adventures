@@ -15,6 +15,7 @@ const HERO_HALF_WIDTH := 11.0
 const STAND_HEIGHT := 101.0
 const CROUCH_HEIGHT := 83.0
 const CROUCH_SPEED := 92.0
+const CLIMB_SPEED := 90.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -23,6 +24,10 @@ var move_axis := 0.0
 var run_hold_time := 0.0
 var run_direction := 0
 var running := false
+var climb_up_held := false
+var climb_down_held := false
+var climbing := false
+var climb_ladder := Rect2()
 var crouch_held := false
 var is_crouching := false
 var touch_controls: Dictionary = {}
@@ -38,6 +43,7 @@ var ground_segments: Array[Rect2] = []
 var raised_platforms: Array[Rect2] = []
 var crates: Array[Rect2] = []
 var low_beams: Array[Rect2] = []
+var ladders: Array[Rect2] = []
 var idle_texture: Texture2D
 var walk_texture: Texture2D
 var run_texture: Texture2D
@@ -50,6 +56,7 @@ func _ready() -> void:
 	raised_platforms = Stage.platforms()
 	crates = Stage.crates()
 	low_beams = Stage.low_beams()
+	ladders = Stage.ladders()
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
 	if ResourceLoader.exists("res://assets/chapolin_idle.png"):
@@ -63,6 +70,8 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	if _handle_ladder(delta):
+		return
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
 		axis = move_axis
@@ -71,7 +80,7 @@ func _physics_process(delta: float) -> void:
 		direction = 1 if axis > 0.0 else -1
 		facing = direction
 	# Crouch lowers the physical collision profile without stretching an art frame.
-	var wants_crouch := crouch_held or Input.is_action_pressed("ui_down")
+	var wants_crouch := crouch_held or (Input.is_action_pressed("ui_down") and _ladder_near(hero_pos.x, hero_pos.y).size.x == 0.0)
 	is_crouching = grounded and (wants_crouch or _under_low_beam(hero_pos.x, hero_pos.y))
 	if direction == 0 or direction != run_direction or not grounded or is_crouching:
 		run_hold_time = 0.0
@@ -145,6 +154,69 @@ func _physics_process(delta: float) -> void:
 	camera_x = lerpf(camera_x, camera_target, minf(1.0, delta * 6.5))
 	queue_redraw()
 
+
+func _ladder_near(x: float, y: float) -> Rect2:
+	for ladder in ladders:
+		var ladder_center := ladder.position.x + ladder.size.x / 2.0
+		if absf(x - ladder_center) <= 28.0 and y >= ladder.position.y - 4.0 and y <= ladder.end.y + 4.0:
+			return ladder
+	return Rect2()
+
+func _handle_ladder(delta: float) -> bool:
+	# Regra de subida/descida em coordenadas do mundo, sem mudar as artes.
+	var climb_dir := (1.0 if climb_down_held else 0.0) - (1.0 if climb_up_held else 0.0)
+	if absf(climb_dir) < 0.1:
+		climb_dir = Input.get_axis("ui_up", "ui_down")
+	if not climbing and grounded and absf(climb_dir) > 0.1:
+		var possible := _ladder_near(hero_pos.x, hero_pos.y)
+		var ascending := climb_dir < 0.0 and hero_pos.y > possible.position.y + 1.0
+		var descending := climb_dir > 0.0 and hero_pos.y < possible.end.y - 1.0
+		if possible.size.x > 0.0 and (ascending or descending):
+			climbing = true
+			climb_ladder = possible
+			grounded = false
+			vertical_speed = 0.0
+			running = false
+			is_crouching = false
+			run_hold_time = 0.0
+			landing_timer = 0.0
+			hero_pos.x = possible.position.x + possible.size.x / 2.0
+	if not climbing:
+		return false
+	if Input.is_action_just_pressed("ui_accept") or jump_requested:
+		# Desprender-se com PULO executa o salto normal neste mesmo quadro.
+		climbing = false
+		grounded = false
+		vertical_speed = JUMP_SPEED
+		air_time = 0.0
+		jump_requested = false
+		return false
+
+	hero_pos.x = climb_ladder.position.x + climb_ladder.size.x / 2.0
+	hero_pos.y = clampf(hero_pos.y + climb_dir * CLIMB_SPEED * delta, climb_ladder.position.y, climb_ladder.end.y)
+	var at_top := climb_dir < 0.0 and hero_pos.y <= climb_ladder.position.y + 0.01
+	var at_bottom := climb_dir > 0.0 and hero_pos.y >= climb_ladder.end.y - 0.01
+	if at_top or at_bottom:
+		climbing = false
+		grounded = true
+		vertical_speed = 0.0
+		landing_timer = 0.0
+		_update_climb_visuals(delta, "idle")
+	else:
+		air_time = 0.0
+		_update_climb_visuals(delta, "climb")
+	return true
+
+func _update_climb_visuals(delta: float, desired: String) -> void:
+	if desired != current_animation:
+		current_animation = desired
+		animation_time = 0.0
+	else:
+		animation_time += delta
+	var camera_target := clampf(hero_pos.x - 215.0, 0.0, Stage.WORLD_WIDTH - SCREEN_WIDTH)
+	camera_x = lerpf(camera_x, camera_target, minf(1.0, delta * 6.5))
+	queue_redraw()
+
 func _has_support(x: float, y: float) -> bool:
 	for surface in ground_segments:
 		if _on_surface(x, y, surface):
@@ -211,6 +283,10 @@ func _respawn() -> void:
 	grounded = true
 	move_axis = 0.0
 	running = false
+	climbing = false
+	climb_ladder = Rect2()
+	climb_up_held = false
+	climb_down_held = false
 	is_crouching = false
 	run_hold_time = 0.0
 	run_direction = 0
@@ -235,6 +311,8 @@ func _draw() -> void:
 
 	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
 	_draw_decoration()
+	for ladder in ladders:
+		_draw_ladder(ladder)
 	for surface in ground_segments:
 		_draw_stone(surface, true)
 	for surface in raised_platforms:
@@ -426,6 +504,20 @@ func _draw_crate(block: Rect2) -> void:
 	draw_circle(block.position + Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 	draw_circle(block.end - Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 
+func _draw_ladder(ladder: Rect2) -> void:
+	# Escada de madeira real de cenografia, com degraus e ferragens.
+	var left_x := ladder.position.x + 3.0
+	var right_x := ladder.end.x - 3.0
+	draw_line(Vector2(left_x, ladder.position.y - 6.0), Vector2(left_x, ladder.end.y), Color("#44332e"), 6.0)
+	draw_line(Vector2(right_x, ladder.position.y - 6.0), Vector2(right_x, ladder.end.y), Color("#44332e"), 6.0)
+	draw_line(Vector2(left_x, ladder.position.y - 6.0), Vector2(left_x, ladder.end.y), Color("#c39a70"), 3.0)
+	draw_line(Vector2(right_x, ladder.position.y - 6.0), Vector2(right_x, ladder.end.y), Color("#c39a70"), 3.0)
+	var rung_y := ladder.position.y + 5.0
+	while rung_y < ladder.end.y:
+		draw_line(Vector2(left_x, rung_y), Vector2(right_x, rung_y), Color("#533c35"), 5.0)
+		draw_line(Vector2(left_x, rung_y - 1.0), Vector2(right_x, rung_y - 1.0), Color("#ecc49a"), 2.0)
+		rung_y += 12.0
+
 func _draw_low_beam(beam: Rect2) -> void:
 	# Decorative hanging scenery plank with real gameplay collision.
 	var mid_x := beam.position.x + beam.size.x / 2.0
@@ -491,6 +583,12 @@ func _draw_controls() -> void:
 	# Mesmos botões e áreas de toque que já funcionam no Android.
 	draw_rect(Rect2(15.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_rect(Rect2(112.0, 310.0, 90.0, 38.0), Color("#263c53"))
+	# SUBIR e DESCER aparecem apenas quando o Chapolin chega a uma escada.
+	if _ladder_near(hero_pos.x, hero_pos.y).size.x > 0.0 or climbing:
+		draw_rect(Rect2(246.0, 310.0, 74.0, 38.0), Color("#53634d") if climb_up_held else Color("#344b49"))
+		draw_rect(Rect2(329.0, 310.0, 74.0, 38.0), Color("#53634d") if climb_down_held else Color("#344b49"))
+		draw_string(ThemeDB.fallback_font, Vector2(256.0, 334.0), "SUBIR", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+		draw_string(ThemeDB.fallback_font, Vector2(335.0, 334.0), "DESCER", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
 	draw_rect(Rect2(414.0, 310.0, 110.0, 38.0), Color("#465344") if is_crouching else Color("#263c53"))
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_string(ThemeDB.fallback_font, Vector2(30.0, 335.0), "ESQ", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
@@ -527,6 +625,11 @@ func _control_at(pos: Vector2) -> String:
 		return "left"
 	if screen_pos.x >= 112.0 and screen_pos.x < 208.0:
 		return "right"
+	if _ladder_near(hero_pos.x, hero_pos.y).size.x > 0.0 or climbing:
+		if screen_pos.x >= 246.0 and screen_pos.x < 320.0:
+			return "up"
+		if screen_pos.x >= 329.0 and screen_pos.x < 403.0:
+			return "down"
 	if screen_pos.x >= 414.0 and screen_pos.x < 525.0:
 		return "crouch"
 	if screen_pos.x >= 535.0 and screen_pos.x <= 640.0:
@@ -537,6 +640,8 @@ func _sync_touch_controls() -> void:
 	var left_pressed := false
 	var right_pressed := false
 	var duck_pressed := false
+	var up_pressed := false
+	var down_pressed := false
 	for button in touch_controls.values():
 		if button == "left":
 			left_pressed = true
@@ -544,5 +649,11 @@ func _sync_touch_controls() -> void:
 			right_pressed = true
 		elif button == "crouch":
 			duck_pressed = true
+		elif button == "up":
+			up_pressed = true
+		elif button == "down":
+			down_pressed = true
 	move_axis = (1.0 if right_pressed else 0.0) - (1.0 if left_pressed else 0.0)
 	crouch_held = duck_pressed
+	climb_up_held = up_pressed
+	climb_down_held = down_pressed
