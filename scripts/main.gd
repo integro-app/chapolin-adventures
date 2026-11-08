@@ -12,6 +12,9 @@ const IDLE_FPS := 4.35
 const WALK_FPS := 8.3
 const SCREEN_WIDTH := 640.0
 const HERO_HALF_WIDTH := 11.0
+const STAND_HEIGHT := 101.0
+const CROUCH_HEIGHT := 83.0
+const CROUCH_SPEED := 92.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -20,6 +23,9 @@ var move_axis := 0.0
 var run_hold_time := 0.0
 var run_direction := 0
 var running := false
+var crouch_held := false
+var is_crouching := false
+var touch_controls: Dictionary = {}
 var jump_requested := false
 var facing := 1
 var animation_time := 0.0
@@ -31,6 +37,7 @@ var camera_x := 0.0
 var ground_segments: Array[Rect2] = []
 var raised_platforms: Array[Rect2] = []
 var crates: Array[Rect2] = []
+var low_beams: Array[Rect2] = []
 var idle_texture: Texture2D
 var walk_texture: Texture2D
 var run_texture: Texture2D
@@ -42,6 +49,7 @@ func _ready() -> void:
 	ground_segments = Stage.ground()
 	raised_platforms = Stage.platforms()
 	crates = Stage.crates()
+	low_beams = Stage.low_beams()
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
 	if ResourceLoader.exists("res://assets/chapolin_idle.png"):
@@ -62,16 +70,20 @@ func _physics_process(delta: float) -> void:
 	if absf(axis) > 0.1:
 		direction = 1 if axis > 0.0 else -1
 		facing = direction
-	if direction == 0 or direction != run_direction or not grounded:
+	# Crouch lowers the physical collision profile without stretching an art frame.
+	var wants_crouch := crouch_held or Input.is_action_pressed("ui_down")
+	is_crouching = grounded and (wants_crouch or _under_low_beam(hero_pos.x, hero_pos.y))
+	if direction == 0 or direction != run_direction or not grounded or is_crouching:
 		run_hold_time = 0.0
 	else:
 		run_hold_time += delta
 	run_direction = direction
-	running = direction != 0 and grounded and run_hold_time >= RUN_DELAY and run_texture != null
-	hero_pos.x = _move_x_with_crates(axis * (RUN_SPEED if running else SPEED) * delta)
+	running = direction != 0 and grounded and not is_crouching and run_hold_time >= RUN_DELAY and run_texture != null
+	var move_speed := CROUCH_SPEED if is_crouching else (RUN_SPEED if running else SPEED)
+	hero_pos.x = _move_x_with_crates(axis * move_speed * delta)
 
 	var was_grounded := grounded
-	var is_jumping := (Input.is_action_just_pressed("ui_accept") or jump_requested) and grounded
+	var is_jumping := (Input.is_action_just_pressed("ui_accept") or jump_requested) and grounded and not is_crouching
 	jump_requested = false
 	if is_jumping:
 		grounded = false
@@ -113,6 +125,8 @@ func _physics_process(delta: float) -> void:
 	var desired := "idle"
 	if not grounded and jump_texture != null:
 		desired = "jump"
+	elif is_crouching and jump_texture != null:
+		desired = "crouch"
 	elif landing_timer > 0.0 and jump_texture != null:
 		desired = "land"
 	elif running:
@@ -162,6 +176,14 @@ func _find_landing_surface(from_y: float, to_y: float, x: float) -> float:
 func _crosses_top(from_y: float, to_y: float, x: float, surface: Rect2) -> bool:
 	return from_y <= surface.position.y and to_y >= surface.position.y and x + 6.0 > surface.position.x and x - 6.0 < surface.end.x
 
+func _under_low_beam(x: float, y: float) -> bool:
+	# An upright hero would collide with any overhead panel at this position.
+	for beam in low_beams:
+		if x + HERO_HALF_WIDTH > beam.position.x and x - HERO_HALF_WIDTH < beam.end.x:
+			if y > beam.position.y and y - STAND_HEIGHT < beam.end.y:
+				return true
+	return false
+
 func _move_x_with_crates(distance: float) -> float:
 	var next_x := clampf(hero_pos.x + distance, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
 	for block in crates:
@@ -172,6 +194,15 @@ func _move_x_with_crates(distance: float) -> float:
 			next_x = block.position.x - HERO_HALF_WIDTH
 		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= block.end.x and next_x - HERO_HALF_WIDTH < block.end.x:
 			next_x = block.end.x + HERO_HALF_WIDTH
+	# Overhead barriers stop upright movement, but a crouched hero passes below.
+	var head_y := hero_pos.y - (CROUCH_HEIGHT if is_crouching else STAND_HEIGHT)
+	for beam in low_beams:
+		if head_y >= beam.end.y or hero_pos.y <= beam.position.y:
+			continue
+		if distance > 0.0 and hero_pos.x + HERO_HALF_WIDTH <= beam.position.x and next_x + HERO_HALF_WIDTH > beam.position.x:
+			next_x = beam.position.x - HERO_HALF_WIDTH
+		elif distance < 0.0 and hero_pos.x - HERO_HALF_WIDTH >= beam.end.x and next_x - HERO_HALF_WIDTH < beam.end.x:
+			next_x = beam.end.x + HERO_HALF_WIDTH
 	return next_x
 
 func _respawn() -> void:
@@ -180,6 +211,7 @@ func _respawn() -> void:
 	grounded = true
 	move_axis = 0.0
 	running = false
+	is_crouching = false
 	run_hold_time = 0.0
 	run_direction = 0
 	jump_requested = false
@@ -209,6 +241,8 @@ func _draw() -> void:
 		_draw_stone(surface, false)
 	for block in crates:
 		_draw_crate(block)
+	for beam in low_beams:
+		_draw_low_beam(beam)
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
@@ -392,13 +426,25 @@ func _draw_crate(block: Rect2) -> void:
 	draw_circle(block.position + Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 	draw_circle(block.end - Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 
+func _draw_low_beam(beam: Rect2) -> void:
+	# Decorative hanging scenery plank with real gameplay collision.
+	var mid_x := beam.position.x + beam.size.x / 2.0
+	draw_line(Vector2(beam.position.x + 6.0, 111.0), Vector2(beam.position.x + 6.0, beam.position.y), Color("#d1b597"), 2.0)
+	draw_line(Vector2(beam.end.x - 6.0, 111.0), Vector2(beam.end.x - 6.0, beam.position.y), Color("#d1b597"), 2.0)
+	draw_rect(beam, Color("#553a34"))
+	draw_rect(Rect2(beam.position.x + 3.0, beam.position.y + 3.0, beam.size.x - 6.0, beam.size.y - 7.0), Color("#b48c69"))
+	draw_line(Vector2(beam.position.x, beam.end.y - 3.0), Vector2(beam.end.x, beam.end.y - 3.0), Color("#e1c393"), 3.0)
+	draw_circle(Vector2(beam.position.x + 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
+	draw_circle(Vector2(beam.end.x - 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
+	draw_string(ThemeDB.fallback_font, Vector2(mid_x - 23.0, beam.position.y + 15.0), "AGACHE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#392d33"))
+
 func _draw_chapolin() -> void:
 	var sprite: Texture2D = idle_texture
 	if current_animation == "walk" and walk_texture != null:
 		sprite = walk_texture
 	elif current_animation == "run" and run_texture != null:
 		sprite = run_texture
-	elif (current_animation == "jump" or current_animation == "land") and jump_texture != null:
+	elif (current_animation == "jump" or current_animation == "land" or current_animation == "crouch") and jump_texture != null:
 		sprite = jump_texture
 
 	if sprite == null:
@@ -421,6 +467,9 @@ func _draw_chapolin() -> void:
 			frame = 5
 	elif current_animation == "land" and jump_texture != null:
 		frame = 6 if landing_timer > 0.08 else 7
+	elif current_animation == "crouch" and jump_texture != null:
+		# Reuses the already-approved crouched preparation pose in the jump atlas.
+		frame = 1
 	else:
 		var fps := IDLE_FPS
 		if current_animation == "walk" and walk_texture != null:
@@ -442,25 +491,58 @@ func _draw_controls() -> void:
 	# Mesmos botões e áreas de toque que já funcionam no Android.
 	draw_rect(Rect2(15.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_rect(Rect2(112.0, 310.0, 90.0, 38.0), Color("#263c53"))
+	draw_rect(Rect2(414.0, 310.0, 110.0, 38.0), Color("#465344") if is_crouching else Color("#263c53"))
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_string(ThemeDB.fallback_font, Vector2(30.0, 335.0), "ESQ", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(125.0, 335.0), "DIR", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(423.0, 334.0), "AGACHAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
 
 func _input(event: InputEvent) -> void:
+	# Finger IDs keep simultaneous move+crouch and move+jump independent.
 	if event is InputEventScreenTouch:
-		_handle_touch(event.position, event.pressed)
+		if event.pressed:
+			var action := _control_at(event.position)
+			touch_controls[event.index] = action
+			if action == "jump":
+				jump_requested = true
+		else:
+			touch_controls.erase(event.index)
+		_sync_touch_controls()
 	elif event is InputEventScreenDrag:
-		_handle_touch(event.position, true)
+		if touch_controls.has(event.index):
+			var action := _control_at(event.position)
+			var previous: String = str(touch_controls[event.index])
+			if action == "jump" and previous != "jump":
+				jump_requested = true
+			touch_controls[event.index] = action
+			_sync_touch_controls()
 
-func _handle_touch(pos: Vector2, pressed: bool) -> void:
+func _control_at(pos: Vector2) -> String:
 	var screen_pos := get_viewport().get_canvas_transform().affine_inverse() * pos
-	if screen_pos.y < 295.0:
-		return
+	if screen_pos.y < 295.0 or screen_pos.y > 360.0:
+		return ""
 	if screen_pos.x < 108.0:
-		move_axis = -1.0 if pressed else 0.0
-	elif screen_pos.x < 208.0:
-		move_axis = 1.0 if pressed else 0.0
-	elif screen_pos.x > 525.0 and pressed:
-		jump_requested = true
+		return "left"
+	if screen_pos.x >= 112.0 and screen_pos.x < 208.0:
+		return "right"
+	if screen_pos.x >= 414.0 and screen_pos.x < 525.0:
+		return "crouch"
+	if screen_pos.x >= 535.0 and screen_pos.x <= 640.0:
+		return "jump"
+	return ""
+
+func _sync_touch_controls() -> void:
+	var left_pressed := false
+	var right_pressed := false
+	var duck_pressed := false
+	for button in touch_controls.values():
+		if button == "left":
+			left_pressed = true
+		elif button == "right":
+			right_pressed = true
+		elif button == "crouch":
+			duck_pressed = true
+	move_axis = (1.0 if right_pressed else 0.0) - (1.0 if left_pressed else 0.0)
+	crouch_held = duck_pressed
