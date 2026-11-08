@@ -163,15 +163,19 @@ func _respawn() -> void:
 	landing_timer = 0.0
 
 func _draw() -> void:
-	# Camadas independentes produzem profundidade sem modificar o personagem.
-	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color("#142439"))
-	draw_rect(Rect2(0.0, 0.0, 640.0, 112.0), Color("#101b30"))
-	draw_circle(Vector2(546.0, 66.0), 20.0, Color("#dec7a0"))
+	# Palco de televisao dos anos 70: os 'predios' sao paineis pintados.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color("#161a29"))
+	draw_rect(Rect2(0.0, 25.0, 640.0, 274.0), Color("#6e6a80"))
+	draw_rect(Rect2(0.0, 156.0, 640.0, 144.0), Color("#807387"))
+	draw_rect(Rect2(0.0, 276.0, 640.0, 84.0), Color("#342e3a"))
 
-	draw_set_transform(Vector2(-camera_x * 0.18, 0.0), 0.0, Vector2.ONE)
+	draw_set_transform(Vector2(-camera_x * 0.15, 0.0), 0.0, Vector2.ONE)
 	_draw_far_buildings()
-	draw_set_transform(Vector2(-camera_x * 0.55, 0.0), 0.0, Vector2.ONE)
+	draw_set_transform(Vector2(-camera_x * 0.52, 0.0), 0.0, Vector2.ONE)
 	_draw_near_buildings()
+
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_stage_lighting()
 
 	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
 	_draw_decoration()
@@ -182,73 +186,187 @@ func _draw() -> void:
 	for block in crates:
 		_draw_crate(block)
 
-	# A posição e as dimensões dos sprites oficiais são preservadas.
+	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(hero_pos - Vector2(camera_x, 0.0), 0.0, Vector2(float(facing), 1.0))
 	_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_controls()
 
 func _draw_far_buildings() -> void:
-	for i in range(26):
-		var x := float(i) * 127.0 - 60.0
-		var height := 113.0 + float(i % 4) * 17.0
-		draw_rect(Rect2(x, 292.0 - height, 135.0, height), Color("#1d2a40"))
-		draw_rect(Rect2(x + 15.0, 268.0 - height, 19.0, 24.0), Color("#1d2a40"))
-		for j in range(2):
-			draw_rect(Rect2(x + 24.0 + float(j) * 59.0, 248.0 - height, 18.0, 29.0), Color("#334059"))
+	# Fundo de pano pintado, preso por ganchos e emendas visiveis.
+	draw_rect(Rect2(-120.0, 41.0, 3100.0, 253.0), Color("#777387"))
+	for i in range(14):
+		var x := float(i) * 230.0 - 105.0
+		draw_rect(Rect2(x, 43.0, 224.0, 251.0), Color("#7b7a8c"))
+		draw_rect(Rect2(x + 217.0, 43.0, 7.0, 251.0), Color("#56576b"))
+		draw_line(Vector2(x, 43.0), Vector2(x + 217.0, 43.0), Color("#b7a5a0"), 3.0)
+		draw_circle(Vector2(x + 8.0, 48.0), 2.0, Color("#4c414c"))
+		draw_circle(Vector2(x + 210.0, 48.0), 2.0, Color("#4c414c"))
+		var peaks := PackedVector2Array([
+			Vector2(x - 5.0, 266.0),
+			Vector2(x + 22.0, 201.0),
+			Vector2(x + 47.0, 221.0),
+			Vector2(x + 99.0, 141.0 + float(i % 3) * 13.0),
+			Vector2(x + 141.0, 211.0),
+			Vector2(x + 183.0, 180.0),
+			Vector2(x + 224.0, 261.0)
+		])
+		draw_colored_polygon(peaks, Color("#4b536c"))
+		draw_line(Vector2(x + 27.0, 206.0), Vector2(x + 99.0, 143.0 + float(i % 3) * 13.0), Color("#8d8c96"), 2.0)
+		draw_rect(Rect2(x, 265.0, 224.0, 30.0), Color("#4a475a"))
+		for j in range(5):
+			var tree_x := x + float(j) * 47.0 + 10.0
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(tree_x - 15.0, 267.0),
+				Vector2(tree_x, 213.0 + float(j % 2) * 15.0),
+				Vector2(tree_x + 15.0, 267.0)
+			]), Color("#343e56"))
+		# Cada emenda e um lembrete de que a paisagem e falsa.
+		draw_line(Vector2(x + 217.0, 53.0), Vector2(x + 217.0, 288.0), Color("#c1ad9d"), 1.0)
+	# Lua falsa pendurada por um fio de teatro.
+	draw_line(Vector2(505.0, 0.0), Vector2(505.0, 81.0), Color("#24232c"), 2.0)
+	draw_circle(Vector2(505.0, 96.0), 17.0, Color("#e2d0ab"))
+	draw_circle(Vector2(500.0, 91.0), 3.0, Color("#b9a991"))
+	draw_circle(Vector2(510.0, 103.0), 2.0, Color("#b9a991"))
 
 func _draw_near_buildings() -> void:
-	for i in range(17):
-		var x := float(i) * 187.0 - 33.0
-		var top := 106.0 + float(i % 3) * 13.0
-		draw_rect(Rect2(x, top, 177.0, 195.0 - top), Color("#35405a"))
-		draw_rect(Rect2(x - 3.0, top - 5.0, 183.0, 8.0), Color("#6d5660"))
-		draw_rect(Rect2(x + 9.0, top + 10.0, 4.0, 145.0), Color("#42435b"))
-		for j in range(2):
-			var wx := x + 32.0 + float(j) * 77.0
-			var wy := top + 33.0
-			draw_rect(Rect2(wx - 4.0, wy - 4.0, 43.0, 54.0), Color("#252b43"))
-			draw_rect(Rect2(wx, wy, 35.0, 45.0), Color("#a87957"))
-			draw_rect(Rect2(wx + 17.0, wy, 3.0, 45.0), Color("#473b47"))
-			draw_rect(Rect2(wx, wy + 20.0, 35.0, 3.0), Color("#473b47"))
-		draw_rect(Rect2(x + 8.0, 286.0, 160.0, 5.0), Color("#555066"))
+	# Cidade inteira fabricada com paineis cenograficos, nao predios reais.
+	for i in range(16):
+		var x := float(i) * 208.0 - 36.0
+		var top := 112.0 + float(i % 3) * 10.0
+		var wall_color := Color("#b8896d") if i % 2 == 0 else Color("#a18b79")
+		draw_rect(Rect2(x + 6.0, top + 6.0, 196.0, 176.0 - top), Color("#292b3c"))
+		draw_rect(Rect2(x, top, 194.0, 292.0 - top), wall_color)
+		draw_rect(Rect2(x - 4.0, top - 8.0, 201.0, 10.0), Color("#664b51"))
+		draw_rect(Rect2(x + 3.0, top - 6.0, 192.0, 3.0), Color("#d8b89b"))
+		draw_rect(Rect2(x + 9.0, top + 3.0, 3.0, 174.0 - top), Color("#e1b393"))
+		# Tijolos 'pintados': marcas planas, sem juntas reais.
+		for j in range(4):
+			var brick_x := x + 19.0 + float(j) * 38.0
+			draw_line(Vector2(brick_x, top + 24.0 + float(j % 2) * 12.0), Vector2(brick_x + 19.0, top + 24.0 + float(j % 2) * 12.0), Color("#945e5d"), 2.0)
+			draw_line(Vector2(brick_x + 9.0, top + 24.0 + float(j % 2) * 12.0), Vector2(brick_x + 9.0, top + 32.0 + float(j % 2) * 12.0), Color("#945e5d"), 1.0)
+
+		# Janela opaca pintada sobre o painel.
+		var win_x := x + 31.0
+		var win_y := top + 51.0
+		draw_rect(Rect2(win_x - 5.0, win_y - 6.0, 63.0, 62.0), Color("#615062"))
+		draw_rect(Rect2(win_x, win_y, 52.0, 50.0), Color("#333b57"))
+		draw_rect(Rect2(win_x + 2.0, win_y + 2.0, 20.0, 23.0), Color("#c08b67"))
+		draw_rect(Rect2(win_x + 26.0, win_y + 2.0, 24.0, 23.0), Color("#d4a277"))
+		draw_rect(Rect2(win_x + 24.0, win_y, 4.0, 50.0), Color("#57414d"))
+		draw_rect(Rect2(win_x, win_y + 25.0, 52.0, 4.0), Color("#57414d"))
+		draw_rect(Rect2(win_x - 8.0, win_y + 49.0, 68.0, 6.0), Color("#d9b49a"))
+
+		# Porta sem profundidade; moldura com madeira aparente na lateral.
+		var door_x := x + 125.0
+		draw_rect(Rect2(door_x - 5.0, top + 54.0, 58.0, 138.0 - top), Color("#493b45"))
+		draw_rect(Rect2(door_x, top + 60.0, 48.0, 131.0 - top), Color("#65464a"))
+		draw_rect(Rect2(door_x + 7.0, top + 69.0, 34.0, 110.0 - top), Color("#88604f"))
+		draw_circle(Vector2(door_x + 36.0, 178.0), 2.0, Color("#f0d8a7"))
+		draw_rect(Rect2(x + 4.0, 288.0, 186.0, 5.0), Color("#715057"))
+
+		# Por tras do painel: escoras e parafusos da cenografia.
+		draw_line(Vector2(x + 192.0, top + 18.0), Vector2(x + 220.0, 298.0), Color("#50362f"), 5.0)
+		draw_line(Vector2(x + 192.0, top + 18.0), Vector2(x + 192.0, 298.0), Color("#6a4a38"), 3.0)
+		for bolt_y in [top + 10.0, 183.0, 280.0]:
+			draw_circle(Vector2(x + 189.0, bolt_y), 2.0, Color("#ddc69c"))
+		# Barra superior presa por dois cabos.
+		draw_line(Vector2(x + 26.0, 20.0), Vector2(x + 26.0, top - 8.0), Color("#48404a"), 1.5)
+		draw_line(Vector2(x + 163.0, 20.0), Vector2(x + 163.0, top - 8.0), Color("#48404a"), 1.5)
+
+func _draw_stage_lighting() -> void:
+	# O teto, os refletores e os feixes de luz ficam 'fora da ficcao'.
+	for i in range(4):
+		var lamp_x := 71.0 + float(i) * 166.0
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(lamp_x - 4.0, 37.0),
+			Vector2(lamp_x + 4.0, 37.0),
+			Vector2(lamp_x + 100.0, 300.0),
+			Vector2(lamp_x - 95.0, 300.0)
+		]), Color(1.0, 0.78, 0.52, 0.055))
+	draw_rect(Rect2(0.0, 0.0, 640.0, 19.0), Color("#211c25"))
+	draw_rect(Rect2(0.0, 19.0, 640.0, 5.0), Color("#55515c"))
+	for x in [46.0, 212.0, 378.0, 544.0]:
+		draw_line(Vector2(x, 23.0), Vector2(x, 36.0), Color("#2b2831"), 3.0)
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x - 16.0, 38.0),
+			Vector2(x + 16.0, 38.0),
+			Vector2(x + 12.0, 54.0),
+			Vector2(x - 12.0, 54.0)
+		]), Color("#30303a"))
+		draw_rect(Rect2(x - 10.0, 48.0, 20.0, 4.0), Color("#eac38b"))
+	for i in range(9):
+		var rig_x := float(i) * 85.0
+		draw_line(Vector2(rig_x, 0.0), Vector2(rig_x + 25.0, 19.0), Color("#827786"), 1.0)
+		draw_line(Vector2(rig_x + 25.0, 0.0), Vector2(rig_x, 19.0), Color("#827786"), 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(242.0, 15.0), "ESTUDIO 1975", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#e2c8a0"))
 
 func _draw_decoration() -> void:
-	for x in [145.0, 935.0, 1450.0, 1930.0, 2260.0]:
-		draw_rect(Rect2(x, 209.0, 5.0, 91.0), Color("#262f3b"))
-		draw_rect(Rect2(x - 16.0, 205.0, 35.0, 5.0), Color("#262f3b"))
-		draw_circle(Vector2(x + 4.0, 219.0), 11.0, Color("#d4a16f"))
-		draw_circle(Vector2(x + 4.0, 219.0), 6.0, Color("#f0ca86"))
-	for x in [93.0, 410.0, 886.0, 1328.0, 1692.0, 2190.0]:
-		draw_rect(Rect2(x, 280.0, 5.0, 20.0), Color("#274b44"))
-		draw_line(Vector2(x + 2.0, 286.0), Vector2(x - 13.0, 275.0), Color("#55735b"), 3.0)
-		draw_line(Vector2(x + 3.0, 292.0), Vector2(x + 14.0, 278.0), Color("#55735b"), 3.0)
-	draw_rect(Rect2(110.0, 264.0, 76.0, 26.0), Color("#72514b"))
-	draw_rect(Rect2(115.0, 270.0, 66.0, 17.0), Color("#473a41"))
-	draw_string(ThemeDB.fallback_font, Vector2(121.0, 283.0), "TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f1d1a5"))
+	# Objetos fisicos decorativos; plataformas e caixas seguem as colisoes originais.
+	for x in [126.0, 924.0, 1440.0, 1935.0, 2263.0]:
+		draw_rect(Rect2(x, 207.0, 5.0, 93.0), Color("#52413c"))
+		draw_rect(Rect2(x - 16.0, 201.0, 37.0, 8.0), Color("#aa865e"))
+		draw_line(Vector2(x - 5.0, 209.0), Vector2(x + 11.0, 222.0), Color("#f1d6a7"), 2.0)
+		draw_circle(Vector2(x + 3.0, 224.0), 10.0, Color("#d9a56c"))
+		draw_circle(Vector2(x + 3.0, 224.0), 6.0, Color("#f6cf8c"))
+	# Arbustos evidentemente recortados de papelao.
+	for x in [98.0, 415.0, 879.0, 1332.0, 1690.0, 2180.0]:
+		draw_rect(Rect2(x - 3.0, 282.0, 14.0, 18.0), Color("#694832"))
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x - 22.0, 280.0),
+			Vector2(x - 6.0, 246.0),
+			Vector2(x + 8.0, 266.0),
+			Vector2(x + 19.0, 252.0),
+			Vector2(x + 25.0, 280.0)
+		]), Color("#637659"))
+		draw_line(Vector2(x - 3.0, 282.0), Vector2(x + 2.0, 294.0), Color("#c09e77"), 2.0)
+	# Plaquinha de bastidor.
+	draw_rect(Rect2(80.0, 258.0, 91.0, 29.0), Color("#684b43"))
+	draw_rect(Rect2(84.0, 261.0, 83.0, 22.0), Color("#d6b78a"))
+	draw_string(ThemeDB.fallback_font, Vector2(90.0, 277.0), "NAO APOIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#49382f"))
+	draw_circle(Vector2(88.0, 265.0), 1.5, Color("#846245"))
+	draw_circle(Vector2(164.0, 265.0), 1.5, Color("#846245"))
+	# Montanha que encobre uma escada de servico (recurso cenografico visual).
+	for x in [720.0, 1610.0]:
+		draw_line(Vector2(x, 255.0), Vector2(x + 46.0, 298.0), Color("#705343"), 3.0)
+		draw_line(Vector2(x + 46.0, 255.0), Vector2(x, 298.0), Color("#705343"), 3.0)
+		draw_line(Vector2(x + 23.0, 255.0), Vector2(x + 23.0, 300.0), Color("#55413b"), 3.0)
 
 func _draw_stone(surface: Rect2, is_floor: bool) -> void:
-	draw_rect(surface, Color("#293148"))
-	draw_rect(Rect2(surface.position.x, surface.position.y, surface.size.x, 7.0), Color("#ae8a74"))
-	draw_rect(Rect2(surface.position.x, surface.position.y + 7.0, surface.size.x, 7.0), Color("#594957"))
-	var count := int(ceilf(surface.size.x / 32.0))
+	# Piso e pranchas de madeira pintada, alinhados aos retangulos de colisao.
+	if not is_floor:
+		var leg_left := surface.position.x + 10.0
+		var leg_right := surface.end.x - 10.0
+		draw_line(Vector2(leg_left, surface.end.y), Vector2(leg_left, 300.0), Color("#6d4c38"), 5.0)
+		draw_line(Vector2(leg_right, surface.end.y), Vector2(leg_right, 300.0), Color("#6d4c38"), 5.0)
+		draw_line(Vector2(leg_left, surface.end.y), Vector2(leg_right, 296.0), Color("#98714e"), 2.0)
+	draw_rect(surface, Color("#5c413a") if is_floor else Color("#785845"))
+	draw_rect(Rect2(surface.position.x, surface.position.y, surface.size.x, 6.0), Color("#d9b68c"))
+	draw_rect(Rect2(surface.position.x, surface.position.y + 6.0, surface.size.x, 7.0), Color("#9e765b"))
+	var count := int(ceilf(surface.size.x / 30.0))
 	for i in range(count):
-		var x := surface.position.x + float(i) * 32.0
-		if x > surface.end.x:
+		var plank_x := surface.position.x + float(i) * 30.0
+		if plank_x > surface.end.x:
 			break
-		draw_line(Vector2(x, surface.position.y + 7.0), Vector2(x, minf(surface.end.y, surface.position.y + 14.0)), Color("#302e41"), 2.0)
-	if is_floor:
-		for i in range(count):
-			var x := surface.position.x + float(i) * 32.0
-			draw_line(Vector2(x, surface.position.y + 29.0), Vector2(minf(x + 30.0, surface.end.x), surface.position.y + 29.0), Color("#455068"), 2.0)
-	else:
-		draw_rect(Rect2(surface.position.x + 6.0, surface.end.y - 4.0, surface.size.x - 12.0, 4.0), Color("#1b2538"))
+		draw_line(Vector2(plank_x, surface.position.y + 6.0), Vector2(plank_x, minf(surface.end.y, surface.position.y + 14.0)), Color("#5c403a"), 2.0)
+		if is_floor:
+			var x2 := minf(plank_x + 25.0, surface.end.x)
+			draw_line(Vector2(plank_x + 2.0, surface.position.y + 37.0), Vector2(x2, surface.position.y + 37.0), Color("#85624f"), 2.0)
+			draw_line(Vector2(plank_x + 4.0, surface.position.y + 19.0), Vector2(x2 - 3.0, surface.position.y + 49.0), Color("#4a3b3d"), 1.0)
+		else:
+			draw_circle(Vector2(plank_x + 7.0, surface.position.y + 9.0), 1.3, Color("#edc9a0"))
+	if not is_floor:
+		draw_rect(Rect2(surface.position.x + 5.0, surface.end.y - 5.0, surface.size.x - 10.0, 4.0), Color("#453636"))
 
 func _draw_crate(block: Rect2) -> void:
-	draw_rect(block, Color("#916140"))
-	draw_rect(Rect2(block.position.x + 3.0, block.position.y + 3.0, block.size.x - 6.0, block.size.y - 6.0), Color("#bd8757"))
-	draw_line(block.position + Vector2(4.0, 4.0), block.end - Vector2(4.0, 4.0), Color("#67402e"), 3.0)
-	draw_line(Vector2(block.end.x - 4.0, block.position.y + 4.0), Vector2(block.position.x + 4.0, block.end.y - 4.0), Color("#67402e"), 3.0)
+	# Caixa cenografica com travessas, pregos e etiqueta de inventario.
+	draw_rect(block, Color("#5a3b31"))
+	draw_rect(Rect2(block.position.x + 2.0, block.position.y + 2.0, block.size.x - 4.0, block.size.y - 4.0), Color("#a97851"))
+	draw_rect(Rect2(block.position.x + 5.0, block.position.y + 5.0, block.size.x - 10.0, block.size.y - 10.0), Color("#c3976c"))
+	draw_line(block.position + Vector2(5.0, 5.0), block.end - Vector2(5.0, 5.0), Color("#705040"), 3.0)
+	draw_line(Vector2(block.end.x - 5.0, block.position.y + 5.0), Vector2(block.position.x + 5.0, block.end.y - 5.0), Color("#705040"), 3.0)
+	draw_circle(block.position + Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
+	draw_circle(block.end - Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 
 func _draw_chapolin() -> void:
 	var sprite: Texture2D = idle_texture
@@ -295,7 +413,7 @@ func _draw_controls() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(30.0, 335.0), "ESQ", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(125.0, 335.0), "DIR", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
-	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CENARIO DE TESTES", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
+	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
