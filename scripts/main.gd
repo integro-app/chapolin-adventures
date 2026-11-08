@@ -19,6 +19,10 @@ const CLIMB_SPEED := 90.0
 const JOYSTICK_RADIUS := 51.0
 const JOYSTICK_DEADZONE := 13.0
 const MOUSE_POINTER_ID := -2
+const ROPE_FOOT_OFFSET := 52.0
+const ROPE_GRAB_DISTANCE := 48.0
+const ROPE_SWING_ACCEL := 8.4
+const ROPE_MAX_ANGLE := 0.78
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -30,6 +34,13 @@ var running := false
 var climb_up_held := false
 var climb_down_held := false
 var climbing := false
+var swinging := false
+var rope_anchor := Vector2.ZERO
+var rope_length := 0.0
+var rope_angle := 0.0
+var rope_angular_velocity := 0.0
+var rope_release_vx := 0.0
+var rope_regrab_delay := 0.0
 var climb_ladder := Rect2()
 var crouch_held := false
 var is_crouching := false
@@ -49,6 +60,7 @@ var raised_platforms: Array[Rect2] = []
 var crates: Array[Rect2] = []
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
+var ropes: Array[Vector3] = []
 var idle_texture: Texture2D
 var walk_texture: Texture2D
 var run_texture: Texture2D
@@ -62,6 +74,7 @@ func _ready() -> void:
 	crates = Stage.crates()
 	low_beams = Stage.low_beams()
 	ladders = Stage.ladders()
+	ropes = Stage.ropes()
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
 	if ResourceLoader.exists("res://assets/chapolin_idle.png"):
@@ -75,6 +88,9 @@ func _ready() -> void:
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	rope_regrab_delay = maxf(0.0, rope_regrab_delay - delta)
+	if _handle_rope(delta):
+		return
 	if _handle_ladder(delta):
 		return
 	var axis := Input.get_axis("ui_left", "ui_right")
@@ -94,7 +110,13 @@ func _physics_process(delta: float) -> void:
 	run_direction = direction
 	running = direction != 0 and grounded and not is_crouching and run_hold_time >= RUN_DELAY and run_texture != null
 	var move_speed := CROUCH_SPEED if is_crouching else (RUN_SPEED if running else SPEED)
-	hero_pos.x = _move_x_with_crates(axis * move_speed * delta)
+	var travel := axis * move_speed * delta
+	if not grounded and absf(rope_release_vx) > 0.1:
+		travel += rope_release_vx * delta
+		rope_release_vx = move_toward(rope_release_vx, 0.0, 300.0 * delta)
+	elif grounded:
+		rope_release_vx = 0.0
+	hero_pos.x = _move_x_with_crates(travel)
 
 	var was_grounded := grounded
 	var is_jumping := (Input.is_action_just_pressed("ui_accept") or jump_requested) and grounded and not is_crouching
@@ -159,6 +181,70 @@ func _physics_process(delta: float) -> void:
 	camera_x = lerpf(camera_x, camera_target, minf(1.0, delta * 6.5))
 	queue_redraw()
 
+
+func _rope_near(x: float, y: float) -> Vector3:
+	for rope in ropes:
+		var hanging_feet := rope.y + rope.z + ROPE_FOOT_OFFSET
+		if absf(x - rope.x) <= ROPE_GRAB_DISTANCE and absf(y - hanging_feet) <= 58.0:
+			return rope
+	return Vector3.ZERO
+
+func _handle_rope(delta: float) -> bool:
+	# CIMA agarra a corda na altura certa; esquerda/direita provocam balanco.
+	var wants_grab := climb_up_held or Input.is_action_pressed("ui_up")
+	if not swinging:
+		if not wants_grab or rope_regrab_delay > 0.0 or climbing:
+			return false
+		# Uma escada tem prioridade quando os dois objetos forem proximos.
+		if _ladder_near(hero_pos.x, hero_pos.y).size.x > 0.0:
+			return false
+		var nearby := _rope_near(hero_pos.x, hero_pos.y)
+		if nearby.z <= 0.0:
+			return false
+		swinging = true
+		rope_anchor = Vector2(nearby.x, nearby.y)
+		rope_length = nearby.z
+		rope_angle = clampf((hero_pos.x - nearby.x) / rope_length, -0.35, 0.35)
+		rope_angular_velocity = 0.0
+		grounded = false
+		climbing = false
+		running = false
+		is_crouching = false
+		vertical_speed = 0.0
+		run_hold_time = 0.0
+		landing_timer = 0.0
+	if Input.is_action_just_pressed("ui_accept") or jump_requested:
+		# Soltar sem "teleportar": preserva impulso tangencial e inicia queda.
+		swinging = false
+		rope_regrab_delay = 0.6
+		rope_release_vx = clampf(rope_angular_velocity * rope_length * cosf(rope_angle), -280.0, 280.0)
+		vertical_speed = -155.0
+		grounded = false
+		air_time = 0.0
+		jump_requested = false
+		_update_climb_visuals(delta, "jump")
+		return true
+
+	var axis := Input.get_axis("ui_left", "ui_right")
+	if absf(axis) < 0.1:
+		axis = move_axis
+	rope_angular_velocity += (-sinf(rope_angle) * 5.0 + axis * ROPE_SWING_ACCEL) * delta
+	rope_angular_velocity *= maxf(0.0, 1.0 - 1.1 * delta)
+	rope_angle += rope_angular_velocity * delta
+	if rope_angle >= ROPE_MAX_ANGLE:
+		rope_angle = ROPE_MAX_ANGLE
+		rope_angular_velocity = minf(0.0, rope_angular_velocity)
+	elif rope_angle <= -ROPE_MAX_ANGLE:
+		rope_angle = -ROPE_MAX_ANGLE
+		rope_angular_velocity = maxf(0.0, rope_angular_velocity)
+	hero_pos = rope_anchor + Vector2(sinf(rope_angle), cosf(rope_angle)) * rope_length + Vector2(0.0, ROPE_FOOT_OFFSET)
+	hero_pos.x = clampf(hero_pos.x, HERO_HALF_WIDTH, Stage.WORLD_WIDTH - HERO_HALF_WIDTH)
+	vertical_speed = 0.0
+	air_time = 0.0
+	if absf(axis) > 0.1:
+		facing = 1 if axis > 0.0 else -1
+	_update_climb_visuals(delta, "rope")
+	return true
 
 func _ladder_near(x: float, y: float) -> Rect2:
 	for ladder in ladders:
@@ -288,6 +374,13 @@ func _respawn() -> void:
 	grounded = true
 	move_axis = 0.0
 	running = false
+	swinging = false
+	rope_anchor = Vector2.ZERO
+	rope_length = 0.0
+	rope_angle = 0.0
+	rope_angular_velocity = 0.0
+	rope_release_vx = 0.0
+	rope_regrab_delay = 0.0
 	climbing = false
 	climb_ladder = Rect2()
 	climb_up_held = false
@@ -326,6 +419,8 @@ func _draw() -> void:
 		_draw_crate(block)
 	for beam in low_beams:
 		_draw_low_beam(beam)
+	for rope in ropes:
+		_draw_rope(rope)
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
@@ -509,6 +604,26 @@ func _draw_crate(block: Rect2) -> void:
 	draw_circle(block.position + Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 	draw_circle(block.end - Vector2(4.0, 4.0), 1.5, Color("#ead1a2"))
 
+func _draw_rope(rope: Vector3) -> void:
+	var top := Vector2(rope.x, rope.y)
+	var end_point := Vector2(rope.x, rope.y + rope.z)
+	if swinging and absf(rope_anchor.x - rope.x) < 1.0:
+		end_point = rope_anchor + Vector2(sinf(rope_angle), cosf(rope_angle)) * rope_length
+	# Cabo de cenario sustentado no teto, com cordame e no inferior.
+	draw_line(Vector2(rope.x, 20.0), top, Color("#3f3235"), 2.0)
+	draw_rect(Rect2(rope.x - 9.0, rope.y - 5.0, 18.0, 9.0), Color("#6d524b"))
+	draw_circle(top, 4.0, Color("#e4be89"))
+	draw_line(top, end_point, Color("#513e35"), 6.0)
+	draw_line(top, end_point, Color("#d1aa78"), 3.0)
+	var stripes := 9
+	for i in range(1, stripes):
+		var t := float(i) / float(stripes)
+		var p := top.lerp(end_point, t)
+		draw_circle(p, 2.4, Color("#e6c79f"))
+	draw_circle(end_point, 5.0, Color("#8f6143"))
+	if not swinging:
+		draw_string(ThemeDB.fallback_font, Vector2(rope.x - 22.0, rope.y + 16.0), "CORDA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f0ce9e"))
+
 func _draw_ladder(ladder: Rect2) -> void:
 	# Escada de madeira real de cenografia, com degraus e ferragens.
 	var left_x := ladder.position.x + 3.0
@@ -541,7 +656,7 @@ func _draw_chapolin() -> void:
 		sprite = walk_texture
 	elif current_animation == "run" and run_texture != null:
 		sprite = run_texture
-	elif (current_animation == "jump" or current_animation == "land" or current_animation == "crouch") and jump_texture != null:
+	elif (current_animation == "jump" or current_animation == "land" or current_animation == "crouch" or current_animation == "rope") and jump_texture != null:
 		sprite = jump_texture
 
 	if sprite == null:
@@ -567,6 +682,9 @@ func _draw_chapolin() -> void:
 	elif current_animation == "crouch" and jump_texture != null:
 		# Reuses the already-approved crouched preparation pose in the jump atlas.
 		frame = 1
+	elif current_animation == "rope" and jump_texture != null:
+		# Pose do salto existente: sem alterar o desenho oficial.
+		frame = 3
 	else:
 		var fps := IDLE_FPS
 		if current_animation == "walk" and walk_texture != null:
