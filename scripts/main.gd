@@ -72,6 +72,7 @@ const STORY_NEXT_RECT := Rect2(403.0, 278.0, 169.0, 48.0)
 const TITLE_PLAY_RECT := Rect2(60.0, 245.0, 211.0, 54.0)
 const TITLE_NEW_RECT := Rect2(286.0, 245.0, 211.0, 54.0)
 const STAGE_BANNER_DURATION := 3.4
+const HUD_PAUSE_RECT := Rect2(572.0, 4.0, 62.0, 48.0)
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -2345,20 +2346,21 @@ func _draw_ledge_grip() -> void:
 	draw_line(ledge_edge + Vector2(-6.0, 0.0), ledge_edge + Vector2(6.0, 0.0), Color("#f3d5a4"), 2.0)
 
 func _draw_health_hud() -> void:
-	# Coracoes compactos na barra superior, sempre visiveis durante o jogo.
+	# Tres coracoes de leitura imediata e vidas em uma segunda linha.
 	for i in range(MAX_HEALTH):
-		var x: float = 364.0 + float(i) * 22.0
-		var y: float = 10.0
-		var fill := Color("#ec4b53") if i < health else Color("#4a3745")
+		var x: float = 356.0 + float(i) * 23.0
+		var y: float = 8.0
+		var fill: Color = Color("#ef5962") if i < health else Color("#423c4d")
 		draw_colored_polygon(PackedVector2Array([
-			Vector2(x, y + 5.0), Vector2(x + 3.0, y + 1.0),
-			Vector2(x + 7.0, y + 1.0), Vector2(x + 9.0, y + 4.0),
-			Vector2(x + 11.0, y + 1.0), Vector2(x + 15.0, y + 1.0),
-			Vector2(x + 18.0, y + 5.0), Vector2(x + 18.0, y + 10.0),
-			Vector2(x + 9.0, y + 18.0), Vector2(x, y + 10.0)
+			Vector2(x, y + 6.0), Vector2(x + 2.0, y + 2.0),
+			Vector2(x + 6.0, y + 1.0), Vector2(x + 9.0, y + 4.0),
+			Vector2(x + 12.0, y + 1.0), Vector2(x + 16.0, y + 2.0),
+			Vector2(x + 18.0, y + 6.0), Vector2(x + 18.0, y + 11.0),
+			Vector2(x + 9.0, y + 20.0), Vector2(x, y + 11.0)
 		]), fill)
-		draw_line(Vector2(x + 3.0, y + 4.0), Vector2(x + 7.0, y + 3.0), Color("#ff9190") if i < health else Color("#645563"), 1.0)
-	draw_string(ThemeDB.fallback_font, Vector2(440.0, 27.0), "VIDAS %02d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f2dfc3"))
+		if i < health:
+			draw_line(Vector2(x + 3.0, y + 5.0), Vector2(x + 6.0, y + 4.0), Color("#ffb3ae"), 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(361.0, 45.0), "VIDAS  x%02d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f1ddc8"))
 
 func _draw_game_over() -> void:
 	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.07, 0.06, 0.10, 0.87))
@@ -2372,82 +2374,131 @@ func _draw_game_over() -> void:
 	draw_rect(Rect2(514.0, 302.0, 110.0, 43.0), Color("#634b40"))
 	draw_string(ThemeDB.fallback_font, Vector2(519.0, 329.0), "REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 
-func _draw_control_medallion(center: Vector2, radius: float, label: String, active: bool, accent: Color, font_size: int) -> void:
-	# Elemento visual; o reconhecimento dos toques continua nas areas originais.
-	var base := Color(0.13, 0.15, 0.25, 0.77) if active else Color(0.10, 0.11, 0.17, 0.47)
-	draw_circle(center + Vector2(0.0, 2.0), radius + 2.0, Color(0.04, 0.05, 0.10, 0.48))
-	draw_circle(center, radius, base)
-	draw_arc(center, radius - 1.0, 0.0, TAU, 40, accent if active else Color(0.54, 0.54, 0.61, 0.42), 2.0)
-	draw_arc(center, radius - 5.0, PI * 1.14, PI * 1.85, 15, Color(0.96, 0.89, 0.72, 0.23), 1.0)
-	var text_x: float = center.x - float(label.length()) * float(font_size) * 0.27
-	draw_string(ThemeDB.fallback_font, Vector2(text_x, center.y + float(font_size) * 0.36), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE if active else Color("#aba9b4"))
+func _draw_hud_action(center: Vector2, radius: float, kind: String, label: String, available: bool, accent: Color, recharge: float = 0.0) -> void:
+	# Arte vetorial leve e nitida; nao altera nenhuma hitbox existente.
+	var border: Color = accent if available else Color("#777482")
+	var fill: Color = Color(0.12, 0.15, 0.24, 0.84) if available else Color(0.13, 0.15, 0.20, 0.54)
+	draw_circle(center + Vector2(0.0, 2.0), radius + 2.0, Color(0.02, 0.02, 0.06, 0.56))
+	draw_circle(center, radius, fill)
+	draw_arc(center, radius - 1.0, 0.0, TAU, 44, Color(border.r, border.g, border.b, 0.84 if available else 0.38), 2.0)
+	draw_arc(center, radius - 5.0, PI * 1.08, PI * 1.77, 16, Color(1.0, 0.93, 0.81, 0.18), 1.0)
+	# Silhuetas identificaveis sem precisar ler abreviacoes pequenas.
+	var icon_color: Color = Color("#f6e6ce") if available else Color("#8e8d96")
+	if kind == "hammer":
+		draw_line(center + Vector2(-7.0, 4.0), center + Vector2(5.0, -9.0), icon_color, 3.0)
+		draw_line(center + Vector2(1.0, -11.0), center + Vector2(11.0, -2.0), icon_color, 7.0)
+	elif kind == "horn":
+		draw_line(center + Vector2(-10.0, -4.0), center + Vector2(-2.0, -4.0), icon_color, 4.0)
+		draw_colored_polygon(PackedVector2Array([
+			center + Vector2(-2.0, -8.0),
+			center + Vector2(7.0, -13.0),
+			center + Vector2(7.0, 4.0),
+			center + Vector2(-2.0, -1.0)
+		]), icon_color)
+		draw_arc(center + Vector2(8.0, -5.0), 7.0, -PI * 0.42, PI * 0.42, 10, icon_color, 2.0)
+	elif kind == "jump":
+		draw_line(center + Vector2(-10.0, -1.0), center + Vector2(0.0, -12.0), icon_color, 4.0)
+		draw_line(center + Vector2(0.0, -12.0), center + Vector2(10.0, -1.0), icon_color, 4.0)
+		draw_line(center + Vector2(0.0, -10.0), center + Vector2(0.0, 4.0), icon_color, 3.0)
+	elif kind == "nano":
+		draw_rect(Rect2(center.x - 4.0, center.y - 9.0, 8.0, 12.0), icon_color)
+		draw_rect(Rect2(center.x - 5.0, center.y - 11.0, 10.0, 3.0), border)
+		draw_rect(Rect2(center.x - 2.0, center.y - 5.0, 4.0, 5.0), Color("#65bb92"))
+	elif kind == "lever":
+		draw_line(center + Vector2(-8.0, 2.0), center + Vector2(8.0, 2.0), icon_color, 3.0)
+		draw_line(center + Vector2(0.0, 2.0), center + Vector2(5.0, -12.0), icon_color, 3.0)
+		draw_circle(center + Vector2(5.0, -12.0), 4.0, accent)
+	# Rotulo legivel dentro do botao, abaixo do simbolo.
+	var small_size: int = 9 if radius > 20.0 else 8
+	var label_x: float = center.x - float(label.length()) * float(small_size) * 0.27
+	draw_string(ThemeDB.fallback_font, Vector2(label_x, center.y + radius - 5.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, small_size, icon_color)
+	if recharge > 0.0 and available:
+		var progress: float = 1.0 - clampf(recharge, 0.0, 1.0)
+		draw_arc(center, radius + 2.0, -PI * 0.5, -PI * 0.5 + TAU * progress, 24, Color("#f0dba9"), 2.5)
+
+func _draw_hud_count(center: Vector2, quantity: int) -> void:
+	draw_circle(center, 9.0, Color("#362c39"))
+	draw_arc(center, 9.0, 0.0, TAU, 18, Color("#d2ac77"), 1.4)
+	draw_string(ThemeDB.fallback_font, center + Vector2(-3.0 if quantity < 10 else -6.0, 4.0), "%d" % quantity, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff0d8"))
 
 func _draw_controls() -> void:
-	# Visual aprovado: joystick translucido e acoes circulares. Areas de toque
-	# originais mantidas, inclusive MARRETA, CORNETA, NANO e PULO.
+	# O direcional permanece flutuante e aceita dois dedos simultaneamente.
 	if joystick_touch_id != -1:
-		draw_circle(joystick_origin, JOYSTICK_RADIUS + 3.0, Color(0.08, 0.10, 0.17, 0.43))
-		draw_arc(joystick_origin, JOYSTICK_RADIUS, 0.0, TAU, 42, Color(0.91, 0.82, 0.70, 0.46), 2.0)
-		var knob := joystick_origin + joystick_offset
-		draw_circle(knob, 23.0, Color(0.20, 0.26, 0.37, 0.78))
-		draw_arc(knob, 23.0, 0.0, TAU, 28, Color(0.80, 0.81, 0.86, 0.68), 2.0)
-		draw_circle(knob, 7.0, Color("#e9d8b6"))
+		draw_circle(joystick_origin, JOYSTICK_RADIUS + 2.0, Color(0.08, 0.10, 0.17, 0.40))
+		draw_arc(joystick_origin, JOYSTICK_RADIUS, 0.0, TAU, 42, Color(0.91, 0.82, 0.70, 0.52), 2.0)
+		var knob: Vector2 = joystick_origin + joystick_offset
+		draw_circle(knob, 23.0, Color(0.19, 0.25, 0.34, 0.85))
+		draw_arc(knob, 23.0, 0.0, TAU, 32, Color(0.85, 0.85, 0.87, 0.76), 2.0)
+		draw_circle(knob, 7.0, Color("#eee1c9"))
 		for i in range(4):
 			var angle: float = float(i) * PI * 0.5
-			var dir := Vector2(cos(angle), sin(angle))
+			var dir: Vector2 = Vector2(cos(angle), sin(angle))
 			var point: Vector2 = joystick_origin + dir * 38.0
-			draw_line(point - dir * 5.0, point, Color(0.92, 0.89, 0.81, 0.65), 2.0)
+			draw_line(point - dir * 5.0, point, Color(0.91, 0.89, 0.81, 0.62), 2.0)
 
-	_draw_control_medallion(Vector2(376.0, 329.0), 23.0, "MART", hammer_unlocked, Color("#dba268"), 12)
-	_draw_control_medallion(Vector2(479.0, 329.0), 23.0, "COR", horn_unlocked and horn_charges > 0, Color("#91c7d7"), 12)
-	_draw_control_medallion(Vector2(580.0, 329.0), 25.0, "PULO", true, Color("#cfd2e0"), 14)
-	var nano_label := "%ds" % int(ceil(nano_remaining)) if _nano_active() else "NANO"
-	_draw_control_medallion(Vector2(580.0, 279.0), 17.0, nano_label, nano_unlocked and (nano_charges > 0 or _nano_active()), Color("#a4d2ac"), 10)
-	if horn_charges > 0:
-		draw_string(ThemeDB.fallback_font, Vector2(468.0, 299.0), "x%d" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e6dee1"))
-	if nano_charges > 0 and not _nano_active():
-		draw_string(ThemeDB.fallback_font, Vector2(611.0, 284.0), "%d" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#c5e8c6"))
-	# Barra superior fixa na tela; no estilo da imagem de referencia.
-	draw_rect(Rect2(0.0, 0.0, 640.0, 48.0), Color(0.08, 0.07, 0.13, 0.94))
-	draw_rect(Rect2(0.0, 45.0, 640.0, 3.0), Color("#6f4a57"))
-	draw_rect(Rect2(129.0, 4.0, 2.0, 39.0), Color("#80616d"))
-	draw_rect(Rect2(357.0, 4.0, 2.0, 39.0), Color("#80616d"))
-	draw_rect(Rect2(429.0, 4.0, 2.0, 39.0), Color("#80616d"))
-	draw_rect(Rect2(509.0, 4.0, 2.0, 39.0), Color("#80616d"))
-	draw_string(ThemeDB.fallback_font, Vector2(11.0, 21.0), "CHAPOLIN", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#ffcc79"))
-	draw_string(ThemeDB.fallback_font, Vector2(25.0, 37.0), "ADVENTURES", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e58a58"))
-	draw_circle(Vector2(114.0, 23.0), 11.0, Color("#e1a235"))
-	draw_string(ThemeDB.fallback_font, Vector2(106.0, 27.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9b3737"))
-	draw_string(ThemeDB.fallback_font, Vector2(140.0, 19.0), "PROLOGO - CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5e1c4"))
-	var objective := "EMPURRE A CAIXA E ABRA A GRADE"
+	# Controles na MESMA posicao dos toques existentes: nao mudar o gameplay.
+	_draw_hud_action(Vector2(376.0, 330.0), 24.0, "hammer", "MARRETA", hammer_unlocked, Color("#d9a06c"), hammer_cooldown / HAMMER_COOLDOWN)
+	_draw_hud_action(Vector2(479.0, 330.0), 24.0, "horn", "CORNETA", horn_unlocked and horn_charges > 0, Color("#91c9d8"), horn_cooldown / HORN_COOLDOWN)
+	_draw_hud_action(Vector2(581.0, 330.0), 27.0, "jump", "PULO", true, Color("#e9dcb9"))
+	var nano_ready: bool = nano_unlocked and (nano_charges > 0 or _nano_active())
+	_draw_hud_action(Vector2(581.0, 277.0), 19.0, "nano", "NANO", nano_ready, Color("#9ccd9f"))
+	if horn_unlocked:
+		_draw_hud_count(Vector2(499.0, 305.0), horn_charges)
+	if nano_unlocked:
+		_draw_hud_count(Vector2(609.0, 264.0), nano_charges)
+	if _nano_active():
+		var timer_fraction: float = clampf(nano_remaining / NANO_DURATION, 0.0, 1.0)
+		draw_arc(Vector2(581.0, 277.0), 21.0, -PI * 0.5, -PI * 0.5 + TAU * timer_fraction, 32, Color("#a7edb9"), 2.5)
+
+	# Barra premium compacta: marca, capitulo, resistencia, premio e menu.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 54.0), Color(0.055, 0.058, 0.105, 0.94))
+	draw_rect(Rect2(0.0, 0.0, 640.0, 2.0), Color("#b78053"))
+	draw_rect(Rect2(0.0, 52.0, 640.0, 2.0), Color("#53445a"))
+	for separator in [120.0, 348.0, 445.0, 562.0]:
+		draw_line(Vector2(separator, 9.0), Vector2(separator, 46.0), Color("#655064"), 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(10.0, 24.0), "CHAPOLIN", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#ffdf99"))
+	draw_string(ThemeDB.fallback_font, Vector2(20.0, 41.0), "ADVENTURES", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e68e60"))
+	draw_circle(Vector2(107.0, 24.0), 10.0, Color("#ecae39"))
+	draw_string(ThemeDB.fallback_font, Vector2(100.0, 28.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#9c3d3b"))
+
+	draw_string(ThemeDB.fallback_font, Vector2(131.0, 15.0), "EPISODIO 00  /  PROLOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#c19a7a"))
+	draw_string(ThemeDB.fallback_font, Vector2(131.0, 31.0), "CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#fff0d8"))
+	var objective: String = "EMPURRE A CAIXA"
 	if puzzle_gate_open and not checkpoint_active:
-		objective = "SIGA ATE O CHECKPOINT"
+		objective = "SIGA AO CHECKPOINT"
 	elif checkpoint_active and (lever_states.is_empty() or not lever_states[0]):
 		objective = "ENCONTRE A ALAVANCA"
 	elif lever_states.size() > 1 and not lever_states[1]:
-		objective = "LIGUE A PLATAFORMA FINAL"
+		objective = "LIGUE A PLATAFORMA"
 	elif lever_states.size() > 1 and lever_states[1]:
 		objective = "RESGATE A MORADORA"
 	if stage_complete:
 		objective = "RESGATE CONCLUIDO"
-	draw_string(ThemeDB.fallback_font, Vector2(141.0, 36.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ddcfb3"))
+	draw_circle(Vector2(133.0, 44.0), 2.0, Color("#e9b16a"))
+	draw_string(ThemeDB.fallback_font, Vector2(141.0, 47.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#dacfc1"))
+
 	_draw_health_hud()
-	draw_circle(Vector2(526.0, 21.0), 11.0, Color("#b48335"))
-	draw_circle(Vector2(526.0, 21.0), 8.0, Color("#efd18a"))
-	draw_string(ThemeDB.fallback_font, Vector2(518.0, 25.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#724146"))
-	draw_string(ThemeDB.fallback_font, Vector2(543.0, 27.0), "%02d" % medal_count, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#ffe6a4"))
-	draw_string(ThemeDB.fallback_font, Vector2(575.0, 27.0), "SEG %d/%d" % [secret_count, secret_rewards.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#d8c1a4"))
+	draw_circle(Vector2(470.0, 22.0), 11.0, Color("#ab7832"))
+	draw_circle(Vector2(470.0, 22.0), 8.0, Color("#e7c17a"))
+	draw_string(ThemeDB.fallback_font, Vector2(463.0, 26.0), "CH", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#854146"))
+	draw_string(ThemeDB.fallback_font, Vector2(487.0, 29.0), "%02d/%02d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#fff1cd"))
+	draw_string(ThemeDB.fallback_font, Vector2(487.0, 45.0), "MEDALHAS", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#bfad9f"))
+
+	# Pausa agora faz parte da barra, em vez de ocupar a area de jogo.
+	draw_circle(Vector2(600.0, 27.0), 19.0, Color("#333244"))
+	draw_arc(Vector2(600.0, 27.0), 19.0, 0.0, TAU, 32, Color("#b99a76"), 1.8)
+	draw_rect(Rect2(593.0, 19.0, 5.0, 16.0), Color("#f0dfca"))
+	draw_rect(Rect2(602.0, 19.0, 5.0, 16.0), Color("#f0dfca"))
+
 	if ledge_hanging:
-		draw_rect(Rect2(174.0, 67.0, 270.0, 22.0), Color(0.10, 0.08, 0.16, 0.78))
-		draw_string(ThemeDB.fallback_font, Vector2(185.0, 82.0), "CIMA SOBE  |  BAIXO SOLTA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
+		draw_rect(Rect2(166.0, 68.0, 275.0, 22.0), Color(0.09, 0.08, 0.16, 0.80))
+		draw_string(ThemeDB.fallback_font, Vector2(178.0, 84.0), "CIMA: SUBIR    BAIXO: SOLTAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
 	var lever_index: int = _nearby_lever_index()
 	if lever_index >= 0 and not pause_menu_open and not stage_complete and not game_over:
-		_draw_control_medallion(Vector2(580.0, 230.0), 23.0, "ACAO", true, Color("#e1b56c"), 13)
-	if not stage_complete and not game_over:
-		draw_rect(Rect2(551.0, 89.0, 76.0, 29.0), Color(0.13, 0.14, 0.23, 0.78))
-		draw_string(ThemeDB.fallback_font, Vector2(560.0, 108.0), "PAUSA", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f0dbc4"))
+		_draw_hud_action(Vector2(580.0, 230.0), 23.0, "lever", "USAR", true, Color("#e1b56c"))
 	if save_notice_time > 0.0 and not pause_menu_open:
-		draw_string(ThemeDB.fallback_font, Vector2(559.0, 141.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a8d6ae"))
+		draw_rect(Rect2(566.0, 65.0, 60.0, 19.0), Color(0.09, 0.20, 0.15, 0.81))
+		draw_string(ThemeDB.fallback_font, Vector2(578.0, 79.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#b3dfb4"))
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -2507,7 +2558,7 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 			_restart_stage()
 		queue_redraw()
 		return
-	if not stage_complete and not game_over and Rect2(551.0, 89.0, 76.0, 29.0).has_point(pos):
+	if not stage_complete and not game_over and HUD_PAUSE_RECT.has_point(pos):
 		pause_menu_open = true
 		_release_joystick()
 		jump_requested = false
