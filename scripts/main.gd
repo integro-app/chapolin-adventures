@@ -827,7 +827,12 @@ func _draw_finish_screen() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(157.0, 143.0), "FASE CONCLUIDA!", HORIZONTAL_ALIGNMENT_LEFT, -1, 27, Color("#f5d697"))
 	var score_label := "MEDALHAS: %d / %d" % [finish_medals, medals.size()]
 	draw_string(ThemeDB.fallback_font, Vector2(224.0, 187.0), score_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color("#f0e6ce"))
-	draw_string(ThemeDB.fallback_font, Vector2(173.0, 235.0), "APERTE PULO PARA REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#e9c8a0"))
+	draw_string(ThemeDB.fallback_font, Vector2(199.0, 235.0), "PRIMEIRO EPISODIO COMPLETO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#e9c8a0"))
+	# A tela cobre o HUD, entao o reinicio precisa ficar visivel.
+	# A area coincide com o botao PULO, que continua acionando o reinicio.
+	draw_rect(Rect2(509.0, 298.0, 120.0, 51.0), Color("#b78351"))
+	draw_rect(Rect2(514.0, 302.0, 110.0, 43.0), Color("#634b40"))
+	draw_string(ThemeDB.fallback_font, Vector2(519.0, 329.0), "REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 
 func _draw_crate(block: Rect2) -> void:
 	# Caixa cenografica com travessas, pregos e etiqueta de inventario.
