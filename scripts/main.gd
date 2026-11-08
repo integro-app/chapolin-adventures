@@ -53,6 +53,9 @@ const NANO_DURATION := 9.0
 const NANO_MAX_CHARGES := 3
 const NANO_SPEED := 155.0
 const NANO_TUNNEL_MARGIN := 0.5
+const SAVE_PATH := "user://chapolin_save_v1.json"
+const SAVE_VERSION := 1
+const AUTOSAVE_INTERVAL := 0.8
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -129,6 +132,10 @@ var nano_tunnels: Array[Rect2] = []
 var nano_unlocked := false
 var nano_charges := 0
 var nano_remaining := 0.0
+var pause_menu_open := false
+var save_dirty := false
+var save_delay := 0.0
+var save_notice_time := 0.0
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -171,9 +178,18 @@ func _ready() -> void:
 		run_texture = load("res://assets/chapolin/run.png")
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
+	_load_game()
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
+	if save_dirty:
+		save_delay -= delta
+		if save_delay <= 0.0:
+			_save_game()
+	save_notice_time = maxf(0.0, save_notice_time - delta)
+	if pause_menu_open:
+		queue_redraw()
+		return
 	if stage_complete or game_over:
 		if Input.is_action_just_pressed("ui_accept") or jump_requested:
 			_restart_stage()
@@ -522,6 +538,7 @@ func _try_push_crate(crate_index: int, delta_x: float) -> bool:
 			if next_block.intersects(gate):
 				return false
 	crates[crate_index] = next_block
+	_mark_save_dirty()
 	if _is_plate_pressed():
 		# Primeiro desafio: a grade permanece aberta depois da ativacao.
 		puzzle_gate_open = true
@@ -623,6 +640,7 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 		# A colisao lateral tira um coracao e provoca recuo.
 		if previous_foot_y <= enemy_top + 6.0 and hero_pos.y > previous_foot_y + 0.1:
 			enemy_active[i] = false
+			_mark_save_dirty()
 			hero_pos.y = enemy_top - 3.0
 			grounded = false
 			vertical_speed = ENEMY_STOMP_BOUNCE
@@ -643,6 +661,7 @@ func _take_damage(source_x: float) -> void:
 	if hurt_grace > 0.0 or game_over or stage_complete:
 		return
 	health -= 1
+	_mark_save_dirty()
 	if health <= 0:
 		_lose_life()
 		return
@@ -665,6 +684,7 @@ func _take_damage(source_x: float) -> void:
 func _lose_life() -> void:
 	lives = maxi(0, lives - 1)
 	health = MAX_HEALTH
+	_mark_save_dirty()
 	damage_knockback_vx = 0.0
 	if lives == 0:
 		game_over = true
@@ -709,6 +729,7 @@ func _use_nano() -> void:
 	if swinging or climbing:
 		return
 	nano_charges -= 1
+	_mark_save_dirty()
 	nano_remaining = NANO_DURATION
 	is_crouching = false
 	running = false
@@ -722,6 +743,7 @@ func _collect_nano_pickups() -> void:
 		var pickup: Vector2 = nano_pickups[i]
 		if absf(hero_pos.x - pickup.x) <= 24.0 and pickup.y >= hero_pos.y - _hero_collision_height() - 10.0 and pickup.y <= hero_pos.y + 10.0:
 			nano_pickup_collected[i] = true
+			_mark_save_dirty()
 			nano_unlocked = true
 			nano_charges = NANO_MAX_CHARGES
 
@@ -739,12 +761,14 @@ func _use_hammer() -> void:
 		if forward >= -8.0 and forward <= HAMMER_REACH and absf(enemy_pos.y - hero_pos.y) <= 56.0:
 			enemy_active[i] = false
 			enemy_stun[i] = 0.0
+			_mark_save_dirty()
 	queue_redraw()
 
 func _use_horn() -> void:
 	if stage_complete or game_over or not horn_unlocked or horn_charges <= 0 or horn_cooldown > 0.0:
 		return
 	horn_charges -= 1
+	_mark_save_dirty()
 	horn_cooldown = HORN_COOLDOWN
 	horn_effect_time = HORN_EFFECT_DURATION
 	horn_blast_origin = hero_pos + Vector2(float(facing) * 28.0, -48.0)
@@ -771,6 +795,7 @@ func _collect_combat_pickups() -> void:
 			continue
 		var kind: int = int(pickup.z)
 		pickup_collected[i] = true
+		_mark_save_dirty()
 		if kind == 1:
 			hammer_unlocked = true
 		elif kind == 2:
@@ -779,6 +804,126 @@ func _collect_combat_pickups() -> void:
 		elif kind == 3:
 			horn_unlocked = true
 			horn_charges = HORN_MAX_CHARGES
+
+func _mark_save_dirty() -> void:
+	if not save_dirty:
+		save_delay = AUTOSAVE_INTERVAL
+	save_dirty = true
+
+func _pack_flags(flags: Array[bool]) -> Array:
+	var packed: Array = []
+	for flag in flags:
+		packed.append(flag)
+	return packed
+
+func _pack_crates() -> Array:
+	var positions: Array = []
+	for block in crates:
+		positions.append([block.position.x, block.position.y])
+	return positions
+
+func _save_game() -> void:
+	# Salvamento local no aparelho. Mantem sprites e arquivos do projeto intactos.
+	var data: Dictionary = {
+		"version": SAVE_VERSION,
+		"checkpoint_active": checkpoint_active,
+		"puzzle_gate_open": puzzle_gate_open,
+		"crates": _pack_crates(),
+		"medals": _pack_flags(medal_collected),
+		"combat_pickups": _pack_flags(pickup_collected),
+		"nano_pickups": _pack_flags(nano_pickup_collected),
+		"enemy_active": _pack_flags(enemy_active),
+		"health": health,
+		"lives": lives,
+		"hammer_unlocked": hammer_unlocked,
+		"horn_unlocked": horn_unlocked,
+		"horn_charges": horn_charges,
+		"nano_unlocked": nano_unlocked,
+		"nano_charges": nano_charges,
+		"stage_complete": stage_complete,
+		"game_over": game_over
+	}
+	var save_file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if save_file == null:
+		# Falha na gravacao nao interrompe o jogo.
+		return
+	save_file.store_string(JSON.stringify(data))
+	save_file.flush()
+	save_dirty = false
+	save_delay = 0.0
+	save_notice_time = 1.8
+
+func _load_flags(data: Dictionary, key: String, flags: Array[bool]) -> void:
+	var serialized: Variant = data.get(key, [])
+	if not serialized is Array:
+		return
+	var entries: Array = serialized
+	if entries.size() != flags.size():
+		return
+	for i in range(flags.size()):
+		flags[i] = bool(entries[i])
+
+func _load_game() -> void:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return
+	var save_file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if save_file == null:
+		return
+	var decoded: Variant = JSON.parse_string(save_file.get_as_text())
+	if not decoded is Dictionary:
+		return
+	var data: Dictionary = decoded
+	if int(data.get("version", -1)) != SAVE_VERSION:
+		return
+
+	checkpoint_active = bool(data.get("checkpoint_active", false))
+	respawn_point = Stage.checkpoint() if checkpoint_active else Stage.RESPAWN
+	puzzle_gate_open = bool(data.get("puzzle_gate_open", false))
+
+	var saved_crates: Variant = data.get("crates", [])
+	if saved_crates is Array:
+		var entries: Array = saved_crates
+		if entries.size() == crates.size():
+			for i in range(crates.size()):
+				var location: Variant = entries[i]
+				if not location is Array:
+					continue
+				var xy: Array = location
+				if xy.size() != 2:
+					continue
+				var block: Rect2 = crates[i]
+				var next_x: float = float(xy[0])
+				var next_y: float = float(xy[1])
+				# Ignora coordenadas invalidas em um arquivo danificado.
+				if next_x >= 0.0 and next_x + block.size.x <= Stage.WORLD_WIDTH and absf(next_y - block.position.y) <= 1.0:
+					crates[i] = Rect2(next_x, next_y, block.size.x, block.size.y)
+
+	_load_flags(data, "medals", medal_collected)
+	_load_flags(data, "combat_pickups", pickup_collected)
+	_load_flags(data, "nano_pickups", nano_pickup_collected)
+	_load_flags(data, "enemy_active", enemy_active)
+
+	medal_count = medal_collected.count(true)
+	health = clampi(int(data.get("health", MAX_HEALTH)), 1, MAX_HEALTH)
+	lives = clampi(int(data.get("lives", MAX_LIVES)), 0, MAX_LIVES)
+	hammer_unlocked = bool(data.get("hammer_unlocked", false))
+	horn_unlocked = bool(data.get("horn_unlocked", false))
+	horn_charges = clampi(int(data.get("horn_charges", 0)), 0, HORN_MAX_CHARGES)
+	nano_unlocked = bool(data.get("nano_unlocked", false))
+	nano_charges = clampi(int(data.get("nano_charges", 0)), 0, NANO_MAX_CHARGES)
+	stage_complete = bool(data.get("stage_complete", false))
+	game_over = bool(data.get("game_over", false)) or lives == 0
+	if stage_complete:
+		game_over = false
+		finish_medals = medal_count
+	hero_pos = respawn_point
+	camera_x = clampf(hero_pos.x - 215.0, 0.0, Stage.WORLD_WIDTH - SCREEN_WIDTH)
+	hurt_grace = DAMAGE_GRACE
+
+func _exit_tree() -> void:
+	# Desligar a cena grava mudancas ainda pendentes.
+	if save_dirty:
+		_save_game()
 
 func _update_level_progress() -> void:
 	_collect_combat_pickups()
@@ -792,12 +937,14 @@ func _update_level_progress() -> void:
 		if absf(hero_pos.x - medal.x) <= 19.0 and medal.y >= hero_pos.y - STAND_HEIGHT - 5.0 and medal.y <= hero_pos.y + 9.0:
 			medal_collected[i] = true
 			medal_count += 1
+			_mark_save_dirty()
 
 	var mark: Vector2 = Stage.checkpoint()
 	if not checkpoint_active and grounded:
 		if absf(hero_pos.x - mark.x) <= 31.0 and absf(hero_pos.y - mark.y) <= 7.0:
 			checkpoint_active = true
 			respawn_point = mark
+			_mark_save_dirty()
 
 	var door: Rect2 = Stage.exit_door()
 	if not stage_complete and puzzle_gate_open and grounded:
@@ -805,12 +952,14 @@ func _update_level_progress() -> void:
 			if absf(hero_pos.y - door.end.y) < 8.0:
 				finish_medals = medal_count
 				stage_complete = true
+				_mark_save_dirty()
 				move_axis = 0.0
 				running = false
 				jump_requested = false
 
 func _restart_stage() -> void:
 	# Recomeca a fase inteira; cair ou levar dano nao apaga o progresso.
+	pause_menu_open = false
 	health = MAX_HEALTH
 	lives = MAX_LIVES
 	game_over = false
@@ -845,6 +994,7 @@ func _restart_stage() -> void:
 	camera_x = 0.0
 	current_animation = "idle"
 	animation_time = 0.0
+	_save_game()
 	queue_redraw()
 
 func _respawn() -> void:
