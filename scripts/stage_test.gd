@@ -58,3 +58,15 @@ static func ropes() -> Array[Vector3]:
 		Vector3(818.0, 102.0, 120.0),
 		Vector3(1595.0, 100.0, 122.0)
 	]
+
+# Primeiro desafio: empurre a primeira caixa sobre a placa para abrir a grade.
+# A placa fica sobre o piso, antes da travessia do primeiro vao.
+static func pressure_plates() -> Array[Rect2]:
+	return [
+		Rect2(680.0, 296.0, 44.0, 4.0)
+	]
+
+static func puzzle_gates() -> Array[Rect2]:
+	return [
+		Rect2(744.0, 169.0, 18.0, 131.0)
+	]
