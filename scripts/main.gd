@@ -1646,6 +1646,9 @@ func _input(event: InputEvent) -> void:
 			_pointer_moved(motion_event.position, MOUSE_POINTER_ID)
 
 func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
+	if (stage_complete or game_over) and Rect2(509.0, 298.0, 120.0, 51.0).has_point(pos):
+		jump_requested = true
+		return
 	if pause_menu_open:
 		if Rect2(140.0, 251.0, 166.0, 43.0).has_point(pos):
 			pause_menu_open = false
