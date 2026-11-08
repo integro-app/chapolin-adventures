@@ -40,3 +40,13 @@ static func low_beams() -> Array[Rect2]:
 		Rect2(912.0, 187.0, 72.0, 23.0),
 		Rect2(1683.0, 187.0, 62.0, 23.0)
 	]
+
+# Escadas de madeira presas aos paineis do estudio: de um piso ate a plataforma.
+# Rect2(x, topo_da_plataforma, largura, distancia_ate_o_chao)
+static func ladders() -> Array[Rect2]:
+	return [
+		Rect2(330.0, 252.0, 22.0, 48.0),
+		Rect2(519.0, 212.0, 22.0, 88.0),
+		Rect2(1293.0, 214.0, 22.0, 86.0),
+		Rect2(2110.0, 218.0, 22.0, 82.0)
+	]
