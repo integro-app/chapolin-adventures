@@ -2514,7 +2514,7 @@ func _draw_controls() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(178.0, 84.0), "CIMA: SUBIR    BAIXO: SOLTAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d7a0"))
 	var lever_index: int = _nearby_lever_index()
 	if lever_index >= 0 and not pause_menu_open and not stage_complete and not game_over:
-		_draw_hud_action(Vector2(580.0, 230.0), 23.0, "lever", "USAR", true, Color("#e1b56c"))
+		_draw_hud_action(Vector2(580.0, 230.0), 22.0, "lever", "USAR", true, Color("#e1b56c"))
 	if save_notice_time > 0.0 and not pause_menu_open:
 		draw_rect(Rect2(566.0, 65.0, 60.0, 19.0), Color(0.09, 0.20, 0.15, 0.81))
 		draw_string(ThemeDB.fallback_font, Vector2(578.0, 79.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#b3dfb4"))
