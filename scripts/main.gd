@@ -1930,21 +1930,31 @@ func _draw_horn_wave() -> void:
 	draw_circle(horn_blast_origin, 6.0, Color("#e2c993"))
 
 func _draw_paper_enemy(pos: Vector2, direction: float, stunned: bool) -> void:
-	# Figurante de papelão com pernas mecanicas e olhos quadrados.
-	var body := Rect2(pos.x - 13.0, pos.y - 27.0, 26.0, 25.0)
-	draw_rect(body, Color("#4a3840"))
-	draw_rect(Rect2(pos.x - 10.0, pos.y - 24.0, 20.0, 19.0), Color("#c48f67"))
-	draw_rect(Rect2(pos.x - 8.0, pos.y - 21.0, 16.0, 7.0), Color("#78505a"))
-	var eye_shift: float = direction * 2.0
-	draw_rect(Rect2(pos.x - 6.0 + eye_shift, pos.y - 20.0, 4.0, 4.0), Color("#f6dea8"))
-	draw_rect(Rect2(pos.x + 2.0 + eye_shift, pos.y - 20.0, 4.0, 4.0), Color("#f6dea8"))
-	draw_line(Vector2(pos.x - 8.0, pos.y - 2.0), Vector2(pos.x - 8.0, pos.y + 1.0), Color("#45373a"), 4.0)
-	draw_line(Vector2(pos.x + 8.0, pos.y - 2.0), Vector2(pos.x + 8.0, pos.y + 1.0), Color("#45373a"), 4.0)
-	draw_line(Vector2(pos.x, pos.y - 27.0), Vector2(pos.x, pos.y - 33.0), Color("#7d655a"), 2.0)
-	draw_circle(Vector2(pos.x, pos.y - 34.0), 3.0, Color("#d5ac71"))
+	# Capanga de televisao: boina, bigode e colete, substituindo apenas a
+	# aparencia do robo de papelao. A colisao ENEMY_HEIGHT continua intocada.
+	var look: float = 1.0 if direction >= 0.0 else -1.0
+	# Botas e pernas.
+	draw_rect(Rect2(pos.x - 10.0, pos.y - 7.0, 8.0, 7.0), Color("#282836"))
+	draw_rect(Rect2(pos.x + 2.0, pos.y - 7.0, 8.0, 7.0), Color("#282836"))
+	draw_line(pos + Vector2(-6.0, -13.0), pos + Vector2(-7.0, -3.0), Color("#343445"), 5.0)
+	draw_line(pos + Vector2(5.0, -13.0), pos + Vector2(7.0, -3.0), Color("#343445"), 5.0)
+	# Colete de capanga e camisa listrada.
+	draw_rect(Rect2(pos.x - 10.0, pos.y - 21.0, 20.0, 14.0), Color("#232c3b"))
+	draw_rect(Rect2(pos.x - 4.0, pos.y - 20.0, 8.0, 13.0), Color("#ddc4a8"))
+	for j in range(3):
+		draw_line(Vector2(pos.x - 3.0, pos.y - 18.0 + float(j) * 4.0), Vector2(pos.x + 3.0, pos.y - 18.0 + float(j) * 4.0), Color("#7d5c57"), 1.0)
+	draw_line(pos + Vector2(-9.0, -18.0), pos + Vector2(-15.0, -13.0), Color("#c79e7c"), 4.0)
+	draw_line(pos + Vector2(9.0, -18.0), pos + Vector2(16.0, -14.0), Color("#c79e7c"), 4.0)
+	# Cabeca, nariz, bigode e boina.
+	draw_circle(pos + Vector2(0.0, -27.0), 8.0, Color("#c99373"))
+	draw_circle(pos + Vector2(look * 5.0, -25.0), 2.5, Color("#d6a486"))
+	draw_line(pos + Vector2(-5.0, -22.0), pos + Vector2(4.0, -22.0), Color("#302a31"), 3.0)
+	draw_circle(pos + Vector2(look * 3.0, -28.0), 1.5, Color("#27222c"))
+	draw_rect(Rect2(pos.x - 9.0, pos.y - 36.0, 18.0, 6.0), Color("#272634"))
+	draw_rect(Rect2(pos.x - 11.0, pos.y - 32.0, 21.0, 3.0), Color("#272634"))
 	if stunned:
-		draw_circle(Vector2(pos.x, pos.y - 35.0), 18.0, Color(0.37, 0.78, 0.90, 0.12))
-		draw_arc(Vector2(pos.x, pos.y - 35.0), 18.0, 0.0, TAU, 24, Color("#86d7e9"), 2.0)
+		draw_circle(pos + Vector2(0.0, -24.0), 17.0, Color(0.37, 0.78, 0.90, 0.12))
+		draw_arc(pos + Vector2(0.0, -24.0), 17.0, 0.0, TAU, 24, Color("#86d7e9"), 2.0)
 		draw_string(ThemeDB.fallback_font, Vector2(pos.x - 9.0, pos.y - 43.0), "ZZ", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d1f7ff"))
 
 func _draw_rolling_obstacle(center: Vector2) -> void:
