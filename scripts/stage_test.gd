@@ -173,3 +173,29 @@ static func secret_rewards() -> Array[Vector2]:
 		Vector2(585.0, 185.0),
 		Vector2(2205.0, 185.0)
 	]
+
+# Roteiro curto do prologo, sem alterar o mapa e as regras do tutorial.
+# Dados externos a main.gd para reaproveitar o sistema em futuros episodios.
+static func story_dialogue(scene_id: String) -> Array[Dictionary]:
+	match scene_id:
+		"intro":
+			return [
+				{"speaker": "MORADORA", "line1": "Socorro! O estudio virou uma cidade", "line2": "cheia de armadilhas de papelao!"},
+				{"speaker": "MORADORA", "line1": "E agora, quem podera", "line2": "nos defender?"},
+				{"speaker": "CHAPOLIN", "line1": "Eu! O Chapolin Colorado!", "line2": "Vou encontrar a saida!"}
+			]
+		"checkpoint":
+			return [
+				{"speaker": "MORADORA", "line1": "Chapolin! Estou perto da saida!", "line2": "A proxima grade tem uma alavanca."},
+				{"speaker": "CHAPOLIN", "line1": "Entendido! E que ninguem", "line2": "se afobe com estes cenarios!"}
+			]
+		"rescue":
+			return [
+				{"speaker": "MORADORA", "line1": "Voce conseguiu! Os mecanismos", "line2": "pararam. Estou a salvo!"},
+				{"speaker": "CHAPOLIN", "line1": "Nao contavam com minha astucia!", "line2": "Agora, vamos embora!"}
+			]
+	return []
+
+# Atriz/figurante da cidade: perto da porta final, fora da patrulha.
+static func rescue_npc() -> Vector2:
+	return Vector2(2292.0, 300.0)
