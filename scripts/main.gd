@@ -1092,6 +1092,8 @@ func _draw() -> void:
 		_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	_draw_controls()
+	if pause_menu_open:
+		_draw_pause_inventory()
 	if stage_complete:
 		_draw_finish_screen()
 	elif game_over:
@@ -1529,6 +1531,24 @@ func _draw_chapolin() -> void:
 		dest.position.y += 4.0
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
+func _draw_pause_inventory() -> void:
+	# Inventario consultavel durante a pausa, sem cobrir o direcional em jogo.
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.07, 0.08, 0.11, 0.83))
+	draw_rect(Rect2(82.0, 45.0, 476.0, 264.0), Color("#332d39"))
+	draw_rect(Rect2(88.0, 51.0, 464.0, 252.0), Color("#51404a"))
+	draw_string(ThemeDB.fallback_font, Vector2(240.0, 84.0), "JOGO PAUSADO", HORIZONTAL_ALIGNMENT_LEFT, -1, 23, Color("#f6d2a0"))
+	draw_string(ThemeDB.fallback_font, Vector2(122.0, 119.0), "INVENTARIO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f6d2a0"))
+	draw_string(ThemeDB.fallback_font, Vector2(122.0, 150.0), "MARRETA: " + ("COLETADA" if hammer_unlocked else "NAO COLETADA"), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(122.0, 179.0), "CORNETA: %d CARGAS" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(122.0, 208.0), "NANICOLINA: %d USOS" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(340.0, 148.0), "MEDALHAS: %d/%d" % [medal_count, medals.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#ead59d"))
+	draw_string(ThemeDB.fallback_font, Vector2(340.0, 179.0), "VIDAS: %d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f3e1ce"))
+	draw_string(ThemeDB.fallback_font, Vector2(340.0, 208.0), "CHECKPOINT: " + ("SIM" if checkpoint_active else "NAO"), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c7dfcb"))
+	draw_rect(Rect2(140.0, 251.0, 166.0, 43.0), Color("#466856"))
+	draw_rect(Rect2(332.0, 251.0, 166.0, 43.0), Color("#84604b"))
+	draw_string(ThemeDB.fallback_font, Vector2(177.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(357.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
+
 func _draw_health_hud() -> void:
 	# Tres coracoes indicam resistencia; vidas sao tentativas inteiras.
 	for i in range(MAX_HEALTH):
@@ -1593,6 +1613,11 @@ func _draw_controls() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(504.0, 47.0), "CHECKPOINT", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#9ddea8"))
 	draw_string(ThemeDB.fallback_font, Vector2(504.0, 65.0), "ROBOS %d/%d" % [enemy_active.size() - enemy_active.count(false), enemy_active.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#e0bf9c"))
 	_draw_health_hud()
+	if not stage_complete and not game_over:
+		draw_rect(Rect2(551.0, 89.0, 76.0, 29.0), Color("#304052"))
+		draw_string(ThemeDB.fallback_font, Vector2(559.0, 108.0), "PAUSA", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("#f0dbc4"))
+	if save_notice_time > 0.0 and not pause_menu_open:
+		draw_string(ThemeDB.fallback_font, Vector2(552.0, 141.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a8d6ae"))
 
 func _input(event: InputEvent) -> void:
 	# Android editor can deliver touch events or mouse events emulated from touch.
@@ -1621,6 +1646,20 @@ func _input(event: InputEvent) -> void:
 			_pointer_moved(motion_event.position, MOUSE_POINTER_ID)
 
 func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
+	if pause_menu_open:
+		if Rect2(140.0, 251.0, 166.0, 43.0).has_point(pos):
+			pause_menu_open = false
+		elif Rect2(332.0, 251.0, 166.0, 43.0).has_point(pos):
+			_restart_stage()
+		queue_redraw()
+		return
+	if not stage_complete and not game_over and Rect2(551.0, 89.0, 76.0, 29.0).has_point(pos):
+		pause_menu_open = true
+		_release_joystick()
+		jump_requested = false
+		_save_game()
+		queue_redraw()
+		return
 	# The left half is an invisible floating joystick activation zone.
 	if joystick_touch_id == -1 and pos.x >= 0.0 and pos.x <= 320.0 and pos.y >= 90.0 and pos.y <= 360.0:
 		joystick_touch_id = pointer_id
