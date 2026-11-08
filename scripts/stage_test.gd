@@ -157,3 +157,19 @@ static func levers() -> Array[Vector3]:
 # Grade acionada pela primeira alavanca, independente da placa/caixa.
 static func lever_gate() -> Rect2:
 	return Rect2(1538.0, 141.0, 16.0, 159.0)
+
+# Paineis falsos opcionais: so a Marreta Bionica pode despedaça-los.
+# Ficam sobre plataformas com acesso pela escada, fora da rota obrigatoria.
+static func fragile_walls() -> Array[Rect2]:
+	return [
+		Rect2(558.0, 168.0, 22.0, 44.0),
+		Rect2(2175.0, 174.0, 22.0, 44.0)
+	]
+
+# Medalhas secretas reveladas apos destruir os paineis.
+# A primeira recupera 1 coracao, a segunda concede 1 vida (ate 5).
+static func secret_rewards() -> Array[Vector2]:
+	return [
+		Vector2(585.0, 185.0),
+		Vector2(2205.0, 185.0)
+	]
