@@ -430,9 +430,12 @@ func _draw_chapolin() -> void:
 		frame = int(floor(animation_time * fps)) % 8
 	var frame_size := Vector2(float(sprite.get_width()) / 8.0, float(sprite.get_height()))
 	var region := Rect2(float(frame) * frame_size.x, 0.0, frame_size.x, frame_size.y)
-	var drawn_height := 101.0
+	# Corrida tem atlas maior e 4px transparentes na base: respeita a altura oficial.
+	var drawn_height := 112.0 if current_animation == "run" and run_texture != null else 101.0
 	var drawn_width := frame_size.x * drawn_height / frame_size.y
 	var dest := Rect2(-drawn_width / 2.0, -drawn_height, drawn_width, drawn_height)
+	if current_animation == "run" and run_texture != null:
+		dest.position.y += 4.0
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_controls() -> void:
