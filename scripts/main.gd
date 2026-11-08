@@ -40,6 +40,14 @@ const MAX_HEALTH := 3
 const MAX_LIVES := 3
 const DAMAGE_KNOCKBACK := 185.0
 const DAMAGE_RECOIL_UP := -160.0
+const HAMMER_REACH := 76.0
+const HAMMER_COOLDOWN := 0.48
+const HAMMER_SWING_DURATION := 0.23
+const HORN_RANGE := 210.0
+const HORN_STUN_SECONDS := 3.5
+const HORN_COOLDOWN := 0.6
+const HORN_MAX_CHARGES := 3
+const HORN_EFFECT_DURATION := 0.32
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -98,6 +106,18 @@ var health := MAX_HEALTH
 var lives := MAX_LIVES
 var game_over := false
 var damage_knockback_vx := 0.0
+var combat_pickups: Array[Vector3] = []
+var pickup_collected: Array[bool] = []
+var hammer_unlocked := false
+var horn_unlocked := false
+var horn_charges := 0
+var hammer_cooldown := 0.0
+var hammer_swing_time := 0.0
+var horn_cooldown := 0.0
+var horn_effect_time := 0.0
+var horn_blast_origin := Vector2.ZERO
+var horn_blast_facing := 1
+var enemy_stun: Array[float] = []
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -122,6 +142,9 @@ func _ready() -> void:
 	ropes = Stage.ropes()
 	enemy_patrols = Stage.enemy_patrols()
 	moving_obstacles = Stage.moving_obstacles()
+	combat_pickups = Stage.combat_pickups()
+	for _pickup in combat_pickups:
+		pickup_collected.append(false)
 	_reset_enemies()
 
 	# Mesmos sprites aprovados para idle, caminhada e salto.
@@ -143,6 +166,10 @@ func _physics_process(delta: float) -> void:
 		queue_redraw()
 		return
 	var previous_foot_y: float = hero_pos.y
+	hammer_cooldown = maxf(0.0, hammer_cooldown - delta)
+	hammer_swing_time = maxf(0.0, hammer_swing_time - delta)
+	horn_cooldown = maxf(0.0, horn_cooldown - delta)
+	horn_effect_time = maxf(0.0, horn_effect_time - delta)
 	hurt_grace = maxf(0.0, hurt_grace - delta)
 	hazard_clock += delta
 	_update_enemy_patrols(delta)
@@ -525,14 +552,19 @@ func _reset_enemies() -> void:
 	enemy_positions.clear()
 	enemy_directions.clear()
 	enemy_active.clear()
+	enemy_stun.clear()
 	for patrol in enemy_patrols:
 		enemy_positions.append(Vector2(patrol.x, patrol.z))
 		enemy_directions.append(1.0)
 		enemy_active.append(true)
+		enemy_stun.append(0.0)
 
 func _update_enemy_patrols(delta: float) -> void:
 	for i in range(enemy_positions.size()):
 		if not enemy_active[i]:
+			continue
+		if enemy_stun[i] > 0.0:
+			enemy_stun[i] = maxf(0.0, enemy_stun[i] - delta)
 			continue
 		var patrol: Vector3 = enemy_patrols[i]
 		var enemy_pos: Vector2 = enemy_positions[i]
@@ -560,6 +592,9 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 	var hero_box := Rect2(hero_pos.x - HERO_HALF_WIDTH, hero_pos.y - hero_height, HERO_HALF_WIDTH * 2.0, hero_height)
 	for i in range(enemy_positions.size()):
 		if not enemy_active[i]:
+			continue
+		if enemy_stun[i] > 0.0:
+			# Figurantes paralisados nao causam dano por contato.
 			continue
 		var enemy_pos: Vector2 = enemy_positions[i]
 		var enemy_top: float = enemy_pos.y - ENEMY_HEIGHT
@@ -624,7 +659,63 @@ func _lose_life() -> void:
 		_respawn()
 	queue_redraw()
 
+func _use_hammer() -> void:
+	if stage_complete or game_over or not hammer_unlocked or hammer_cooldown > 0.0:
+		return
+	hammer_cooldown = HAMMER_COOLDOWN
+	hammer_swing_time = HAMMER_SWING_DURATION
+	# Golpe frontal de curto alcance, em terra, escada ou corda.
+	for i in range(enemy_positions.size()):
+		if not enemy_active[i]:
+			continue
+		var enemy_pos: Vector2 = enemy_positions[i]
+		var forward: float = float(facing) * (enemy_pos.x - hero_pos.x)
+		if forward >= -8.0 and forward <= HAMMER_REACH and absf(enemy_pos.y - hero_pos.y) <= 56.0:
+			enemy_active[i] = false
+			enemy_stun[i] = 0.0
+	queue_redraw()
+
+func _use_horn() -> void:
+	if stage_complete or game_over or not horn_unlocked or horn_charges <= 0 or horn_cooldown > 0.0:
+		return
+	horn_charges -= 1
+	horn_cooldown = HORN_COOLDOWN
+	horn_effect_time = HORN_EFFECT_DURATION
+	horn_blast_origin = hero_pos + Vector2(float(facing) * 28.0, -48.0)
+	horn_blast_facing = facing
+	# Corneta nao elimina inimigos: paralisa os que estiverem na frente.
+	for i in range(enemy_positions.size()):
+		if not enemy_active[i]:
+			continue
+		var enemy_pos: Vector2 = enemy_positions[i]
+		var forward: float = float(facing) * (enemy_pos.x - hero_pos.x)
+		if forward >= -8.0 and forward <= HORN_RANGE and absf(enemy_pos.y - hero_pos.y) <= 68.0:
+			enemy_stun[i] = HORN_STUN_SECONDS
+	queue_redraw()
+
+func _collect_combat_pickups() -> void:
+	# Inventario acompanha o Chapolin entre danos e retornos ao checkpoint.
+	for i in range(combat_pickups.size()):
+		if pickup_collected[i]:
+			continue
+		var pickup: Vector3 = combat_pickups[i]
+		if absf(hero_pos.x - pickup.x) > 23.0:
+			continue
+		if pickup.y < hero_pos.y - STAND_HEIGHT - 9.0 or pickup.y > hero_pos.y + 12.0:
+			continue
+		var kind: int = int(pickup.z)
+		pickup_collected[i] = true
+		if kind == 1:
+			hammer_unlocked = true
+		elif kind == 2:
+			horn_unlocked = true
+			horn_charges = HORN_MAX_CHARGES
+		elif kind == 3:
+			horn_unlocked = true
+			horn_charges = HORN_MAX_CHARGES
+
 func _update_level_progress() -> void:
+	_collect_combat_pickups()
 	# As medalhas sao opcionais, coletadas ao tocar no corpo do heroi.
 	# O progresso permanece quando ele cai e retorna ao checkpoint.
 	for i in range(medals.size()):
@@ -657,6 +748,15 @@ func _restart_stage() -> void:
 	lives = MAX_LIVES
 	game_over = false
 	damage_knockback_vx = 0.0
+	hammer_unlocked = false
+	horn_unlocked = false
+	horn_charges = 0
+	hammer_cooldown = 0.0
+	hammer_swing_time = 0.0
+	horn_cooldown = 0.0
+	horn_effect_time = 0.0
+	for i in range(pickup_collected.size()):
+		pickup_collected[i] = false
 	puzzle_gate_open = false
 	crates = Stage.crates()
 	checkpoint_active = false
@@ -741,13 +841,20 @@ func _draw() -> void:
 	for i in range(medals.size()):
 		if not medal_collected[i]:
 			_draw_medal(medals[i])
+	for i in range(combat_pickups.size()):
+		if not pickup_collected[i]:
+			_draw_combat_pickup(combat_pickups[i])
+	if horn_effect_time > 0.0:
+		_draw_horn_wave()
 	for i in range(enemy_positions.size()):
 		if enemy_active[i]:
-			_draw_paper_enemy(enemy_positions[i], enemy_directions[i])
+			_draw_paper_enemy(enemy_positions[i], enemy_directions[i], enemy_stun[i] > 0.0)
 	for i in range(moving_obstacles.size()):
 		_draw_rolling_obstacle(_obstacle_position(moving_obstacles[i], i))
 	if hurt_grace > 0.0:
 		_draw_respawn_shield()
+	if hammer_swing_time > 0.0:
+		_draw_hammer_swing()
 
 	# O Chapolin usa os sprites oficiais: nenhum pixel dele foi alterado.
 	draw_set_transform(Vector2(roundf(hero_pos.x - camera_x), roundf(hero_pos.y)), 0.0, Vector2(float(facing), 1.0))
@@ -950,7 +1057,42 @@ func _draw_puzzle_gate(gate: Rect2) -> void:
 	var light := Color("#7fca8b") if puzzle_gate_open else Color("#e2a26d")
 	draw_circle(Vector2(gate.position.x + gate.size.x / 2.0, gate.position.y - 10.0), 5.0, light)
 
-func _draw_paper_enemy(pos: Vector2, direction: float) -> void:
+func _draw_combat_pickup(pickup: Vector3) -> void:
+	var pos := Vector2(pickup.x, pickup.y)
+	var kind: int = int(pickup.z)
+	draw_circle(pos + Vector2(1.0, 2.0), 14.0, Color("#3a343a"))
+	draw_circle(pos, 12.0, Color("#deb983"))
+	draw_circle(pos, 9.0, Color("#4b3e46"))
+	if kind == 1:
+		# Cabo e cabeca da marreta.
+		draw_line(pos + Vector2(-3.0, 7.0), pos + Vector2(5.0, -6.0), Color("#d0a476"), 3.0)
+		draw_rect(Rect2(pos.x - 2.0, pos.y - 10.0, 14.0, 6.0), Color("#a7aab0"))
+	elif kind == 2:
+		# Cone de sopro da corneta.
+		draw_line(pos + Vector2(-8.0, 4.0), pos + Vector2(2.0, 4.0), Color("#e5bc72"), 4.0)
+		draw_colored_polygon(PackedVector2Array([
+			pos + Vector2(1.0, 2.0), pos + Vector2(9.0, -4.0), pos + Vector2(9.0, 10.0)
+		]), Color("#efce82"))
+	else:
+		draw_string(ThemeDB.fallback_font, pos + Vector2(-8.0, 5.0), "+3", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#f4d585"))
+
+func _draw_hammer_swing() -> void:
+	var elapsed: float = 1.0 - hammer_swing_time / HAMMER_SWING_DURATION
+	var start: Vector2 = hero_pos + Vector2(float(facing) * 12.0, -57.0)
+	var reach: Vector2 = start + Vector2(float(facing) * (23.0 + elapsed * 37.0), -12.0 + elapsed * 16.0)
+	draw_line(start, reach, Color("#e1b37c"), 5.0)
+	draw_rect(Rect2(reach.x - 11.0, reach.y - 8.0, 22.0, 14.0), Color("#a6adb6"))
+	draw_rect(Rect2(reach.x - 8.0, reach.y - 6.0, 16.0, 10.0), Color("#d0d7d9"))
+
+func _draw_horn_wave() -> void:
+	var progress: float = 1.0 - horn_effect_time / HORN_EFFECT_DURATION
+	var radius: float = 20.0 + HORN_RANGE * progress
+	var start_angle: float = -PI * 0.5 if horn_blast_facing > 0 else PI * 0.5
+	var end_angle: float = PI * 0.5 if horn_blast_facing > 0 else PI * 1.5
+	draw_arc(horn_blast_origin, radius, start_angle, end_angle, 32, Color(0.57, 0.89, 0.99, 0.80 - progress * 0.65), 3.0)
+	draw_circle(horn_blast_origin, 6.0, Color("#e2c993"))
+
+func _draw_paper_enemy(pos: Vector2, direction: float, stunned: bool) -> void:
 	# Figurante de papelão com pernas mecanicas e olhos quadrados.
 	var body := Rect2(pos.x - 13.0, pos.y - 27.0, 26.0, 25.0)
 	draw_rect(body, Color("#4a3840"))
@@ -963,6 +1105,10 @@ func _draw_paper_enemy(pos: Vector2, direction: float) -> void:
 	draw_line(Vector2(pos.x + 8.0, pos.y - 2.0), Vector2(pos.x + 8.0, pos.y + 1.0), Color("#45373a"), 4.0)
 	draw_line(Vector2(pos.x, pos.y - 27.0), Vector2(pos.x, pos.y - 33.0), Color("#7d655a"), 2.0)
 	draw_circle(Vector2(pos.x, pos.y - 34.0), 3.0, Color("#d5ac71"))
+	if stunned:
+		draw_circle(Vector2(pos.x, pos.y - 35.0), 18.0, Color(0.37, 0.78, 0.90, 0.12))
+		draw_arc(Vector2(pos.x, pos.y - 35.0), 18.0, 0.0, TAU, 24, Color("#86d7e9"), 2.0)
+		draw_string(ThemeDB.fallback_font, Vector2(pos.x - 9.0, pos.y - 43.0), "ZZ", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d1f7ff"))
 
 func _draw_rolling_obstacle(center: Vector2) -> void:
 	# Rolo giratorio de cenografia, sem violencia grafica.
@@ -1177,7 +1323,17 @@ func _draw_controls() -> void:
 		draw_circle(knob, 18.0, Color(0.42, 0.53, 0.53, 0.88))
 		draw_circle(knob, 8.0, Color("#f1d9b5"))
 
-	# Pulo permanece separado para uso com outro dedo.
+	# Dois ataques independentes e o PULO. Joystick permanece invisivel.
+	var hammer_color := Color("#665244") if hammer_unlocked else Color("#283540")
+	var horn_color := Color("#426274") if horn_unlocked and horn_charges > 0 else Color("#283540")
+	if hammer_swing_time > 0.0:
+		hammer_color = Color("#937252")
+	if horn_effect_time > 0.0:
+		horn_color = Color("#438aa5")
+	draw_rect(Rect2(326.0, 310.0, 98.0, 38.0), hammer_color)
+	draw_rect(Rect2(429.0, 310.0, 98.0, 38.0), horn_color)
+	draw_string(ThemeDB.fallback_font, Vector2(338.0, 334.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(438.0, 334.0), "CORNETA %d" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 	draw_rect(Rect2(535.0, 310.0, 90.0, 38.0), Color("#263c53"))
 	draw_string(ThemeDB.fallback_font, Vector2(545.0, 335.0), "PULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
@@ -1223,7 +1379,11 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 		joystick_offset = Vector2.ZERO
 		_update_joystick_axes()
 		queue_redraw()
-	elif pos.x >= 510.0 and pos.x <= 640.0 and pos.y >= 285.0 and pos.y <= 360.0:
+	elif pos.x >= 326.0 and pos.x <= 426.0 and pos.y >= 295.0 and pos.y <= 360.0:
+		_use_hammer()
+	elif pos.x >= 429.0 and pos.x <= 528.0 and pos.y >= 295.0 and pos.y <= 360.0:
+		_use_horn()
+	elif pos.x >= 535.0 and pos.x <= 640.0 and pos.y >= 285.0 and pos.y <= 360.0:
 		# Keep PULO independent from the joystick finger.
 		jump_requested = true
 
