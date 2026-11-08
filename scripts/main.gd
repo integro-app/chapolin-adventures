@@ -191,6 +191,10 @@ var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
 var sky_panorama: Texture2D
 var city_facades: Texture2D
+var city_bg_art: Texture2D
+var city_mid_art: Texture2D
+var city_set_art: Texture2D
+var city_lights_art: Texture2D
 var idle_texture: Texture2D
 var walk_texture: Texture2D
 var run_texture: Texture2D
@@ -235,8 +239,16 @@ func _ready() -> void:
 		nano_pickup_collected.append(false)
 	_reset_enemies()
 
-	# Camadas de arte da Cidade de Papelao, importadas pelo Godot como texturas.
-	# Se uma importacao falhar no Android, a cenografia anterior continua disponivel.
+	# Os quatro PNGs correspondem as imagens aprovadas. A cenografia
+	# anterior permanece como fallback para problemas de importacao.
+	if ResourceLoader.exists("res://assets/stage/cidade_bg.png"):
+		city_bg_art = load("res://assets/stage/cidade_bg.png")
+	if ResourceLoader.exists("res://assets/stage/cidade_mid.png"):
+		city_mid_art = load("res://assets/stage/cidade_mid.png")
+	if ResourceLoader.exists("res://assets/stage/cidade_set.png"):
+		city_set_art = load("res://assets/stage/cidade_set.png")
+	if ResourceLoader.exists("res://assets/stage/cidade_lights.png"):
+		city_lights_art = load("res://assets/stage/cidade_lights.png")
 	if ResourceLoader.exists("res://assets/stage/cidade_papelao_sky.svg"):
 		sky_panorama = load("res://assets/stage/cidade_papelao_sky.svg")
 	if ResourceLoader.exists("res://assets/stage/cidade_papelao_facades.svg"):
@@ -1457,7 +1469,7 @@ func _respawn() -> void:
 func _draw() -> void:
 	# Noite azul-violeta como na arte aprovada. Nenhuma arte do heroi e alterada.
 	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color("#11172d"))
-	if sky_panorama == null:
+	if sky_panorama == null and city_bg_art == null:
 		draw_rect(Rect2(0.0, 25.0, 640.0, 274.0), Color("#35406a"))
 		draw_rect(Rect2(0.0, 156.0, 640.0, 144.0), Color("#5d547b"))
 	draw_rect(Rect2(0.0, 300.0, 640.0, 60.0), Color("#292235"))
@@ -1468,7 +1480,8 @@ func _draw() -> void:
 	_draw_near_buildings()
 
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	_draw_stage_lighting()
+	if city_lights_art == null:
+		_draw_stage_lighting()
 
 	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
 	_draw_decoration()
@@ -1539,6 +1552,10 @@ func _draw() -> void:
 	if hurt_grace <= 0.0 or int(hurt_grace * 14.0) % 2 == 0:
 		_draw_chapolin()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if city_lights_art != null:
+		# O pano dos refletores vem depois dos personagens mas antes do HUD:
+		# feixes e cortinas se sobrepoem a cena, nunca aos controles.
+		draw_texture_rect(city_lights_art, Rect2(0.0, 0.0, SCREEN_WIDTH, 360.0), false, Color(1.0, 1.0, 1.0, 0.67))
 	_draw_cinematic_atmosphere()
 	_draw_controls()
 	if stage_banner_timer > 0.0 and not story_active and not title_active and not pause_menu_open:
@@ -1627,6 +1644,11 @@ func _draw_title_screen() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(318.0, 310.0), "REINICIA O PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#b9a498"))
 
 func _draw_far_buildings() -> void:
+	if city_bg_art != null:
+		# Fundo distante e largo o suficiente para o deslocamento de camera
+		# (max. 1760 * fator 0.15 = 264, largura 1024).
+		draw_texture(city_bg_art, Vector2.ZERO)
+		return
 	if sky_panorama != null:
 		draw_texture(sky_panorama, Vector2.ZERO)
 		return
@@ -1667,6 +1689,12 @@ func _draw_far_buildings() -> void:
 	draw_circle(Vector2(510.0, 103.0), 2.0, Color("#b9a991"))
 
 func _draw_near_buildings() -> void:
+	if city_mid_art != null:
+		# Fachadas em 3 paineis para cobrir os 2400px de fase, sem alterar
+		# plataformas nem criar paredes falsas no caminho do Chapolin.
+		for panel in range(3):
+			draw_texture(city_mid_art, Vector2(float(panel) * 1024.0, 0.0))
+		return
 	if city_facades != null:
 		# Tres paineis em parallax; so cenografia, sem colisao nova.
 		for i in range(3):
@@ -1805,6 +1833,30 @@ func _draw_studio_set_details() -> void:
 		draw_rect(Rect2(lamp_x - 3.0, light_y - 5.0, 6.0, 10.0), Color(1.0, 0.49 * flicker, 0.30 * flicker))
 		draw_circle(Vector2(lamp_x, light_y), 17.0, Color(1.0, 0.38, 0.18, 0.09 * flicker))
 
+func _draw_art_floor(surface: Rect2) -> void:
+	# Faixa da madeira produzida na arte: acompanha o topo colidivel.
+	# O original inteiro NAO e colado sobre a fase (evita pisos falsos).
+	if city_set_art == null:
+		return
+	var offset: float = 0.0
+	while offset < surface.size.x:
+		var step: float = minf(125.0, surface.size.x - offset)
+		var dest := Rect2(surface.position.x + offset, surface.position.y - 6.0, step, 68.0)
+		var src := Rect2(423.0, 287.0, step, 68.0)
+		draw_texture_rect_region(city_set_art, dest, src)
+		offset += step
+
+func _draw_art_platform_top(surface: Rect2) -> void:
+	if city_set_art == null:
+		return
+	var offset: float = 0.0
+	while offset < surface.size.x:
+		var step: float = minf(112.0, surface.size.x - offset)
+		var dest := Rect2(surface.position.x + offset, surface.position.y - 6.0, step, 20.0)
+		var src := Rect2(517.0, 129.0, step, 22.0)
+		draw_texture_rect_region(city_set_art, dest, src)
+		offset += step
+
 func _draw_stone(surface: Rect2, is_floor: bool) -> void:
 	# Piso e pranchas de madeira pintada, alinhados aos retangulos de colisao.
 	if not is_floor:
@@ -1830,6 +1882,9 @@ func _draw_stone(surface: Rect2, is_floor: bool) -> void:
 			draw_circle(Vector2(plank_x + 7.0, surface.position.y + 9.0), 1.3, Color("#edc9a0"))
 	if not is_floor:
 		draw_rect(Rect2(surface.position.x + 5.0, surface.end.y - 5.0, surface.size.x - 10.0, 4.0), Color("#453636"))
+		_draw_art_platform_top(surface)
+	else:
+		_draw_art_floor(surface)
 
 func _draw_pressure_plate(plate: Rect2) -> void:
 	var pressed := _is_plate_pressed()
@@ -2022,7 +2077,13 @@ func _draw_finish_screen() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(519.0, 329.0), "REINICIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 
 func _draw_crate(block: Rect2) -> void:
-	# Caixa cenografica com travessas, pregos e etiqueta de inventario.
+	if city_set_art != null:
+		# Caixa recortada da arte e dimensionada pela colisao real.
+		draw_texture_rect_region(city_set_art,
+			Rect2(block.position.x, block.position.y - 1.0, block.size.x, block.size.y + 2.0),
+			Rect2(216.0, 230.0, 84.0, 59.0))
+		return
+	# Caixa cenografica original (fallback).
 	draw_rect(block, Color("#5a3b31"))
 	draw_rect(Rect2(block.position.x + 2.0, block.position.y + 2.0, block.size.x - 4.0, block.size.y - 4.0), Color("#a97851"))
 	draw_rect(Rect2(block.position.x + 5.0, block.position.y + 5.0, block.size.x - 10.0, block.size.y - 10.0), Color("#c3976c"))
@@ -2055,7 +2116,13 @@ func _draw_rope(rope: Vector3) -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(rope.x - 22.0, rope.y + 16.0), "CORDA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f0ce9e"))
 
 func _draw_ladder(ladder: Rect2) -> void:
-	# Escada de madeira real de cenografia, com degraus e ferragens.
+	if city_set_art != null:
+		# Traves da escada recortadas e esticadas na altura funcional.
+		draw_texture_rect_region(city_set_art,
+			Rect2(ladder.position.x - 3.0, ladder.position.y - 3.0, ladder.size.x + 6.0, ladder.size.y + 3.0),
+			Rect2(307.0, 128.0, 34.0, 159.0))
+		return
+	# Escada original (fallback).
 	var left_x := ladder.position.x + 3.0
 	var right_x := ladder.end.x - 3.0
 	draw_line(Vector2(left_x, ladder.position.y - 6.0), Vector2(left_x, ladder.end.y), Color("#44332e"), 6.0)
