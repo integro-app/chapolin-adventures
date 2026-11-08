@@ -67,6 +67,8 @@ const LEVER_REACH := 43.0
 const LEVER_HEIGHT_REACH := 58.0
 const SECRET_LIFE_LIMIT := 5
 const BREAK_EFFECT_SECONDS := 0.42
+const STORY_SKIP_RECT := Rect2(63.0, 278.0, 157.0, 48.0)
+const STORY_NEXT_RECT := Rect2(403.0, 278.0, 169.0, 48.0
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -136,6 +138,13 @@ var respawn_point := Stage.RESPAWN
 var checkpoint_active := false
 var stage_complete := false
 var finish_medals := 0
+var rescue_complete := false
+var intro_seen := false
+var checkpoint_story_seen := false
+var story_active := false
+var story_scene_id := ""
+var story_step := 0
+var story_pages: Array[Dictionary] = []
 var enemy_patrols: Array[Vector3] = []
 var enemy_positions: Array[Vector2] = []
 var enemy_directions: Array[float] = []
@@ -226,6 +235,8 @@ func _ready() -> void:
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
 	_load_game()
+	if not intro_seen and not stage_complete and not game_over:
+		_start_story("intro")
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
@@ -234,6 +245,12 @@ func _physics_process(delta: float) -> void:
 		if save_delay <= 0.0:
 			_save_game()
 	save_notice_time = maxf(0.0, save_notice_time - delta)
+	if story_active:
+		if Input.is_action_just_pressed("ui_accept"):
+			_advance_story()
+		jump_requested = false
+		queue_redraw()
+		return
 	if pause_menu_open:
 		queue_redraw()
 		return
@@ -1147,7 +1164,10 @@ func _save_game() -> void:
 		"nano_unlocked": nano_unlocked,
 		"nano_charges": nano_charges,
 		"stage_complete": stage_complete,
-		"game_over": game_over
+		"game_over": game_over,
+		"intro_seen": intro_seen,
+		"checkpoint_story_seen": checkpoint_story_seen,
+		"rescue_complete": rescue_complete
 	}
 	var save_file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if save_file == null:
@@ -1223,6 +1243,10 @@ func _load_game() -> void:
 	nano_charges = clampi(int(data.get("nano_charges", 0)), 0, NANO_MAX_CHARGES)
 	stage_complete = bool(data.get("stage_complete", false))
 	game_over = bool(data.get("game_over", false)) or lives == 0
+	# Saves antigos nao devem interromper o jogador com cenas inesperadas.
+	intro_seen = bool(data.get("intro_seen", true))
+	checkpoint_story_seen = bool(data.get("checkpoint_story_seen", checkpoint_active))
+	rescue_complete = bool(data.get("rescue_complete", stage_complete))
 	if stage_complete:
 		game_over = false
 		finish_medals = medal_count
@@ -1234,6 +1258,43 @@ func _exit_tree() -> void:
 	# Desligar a cena grava mudancas ainda pendentes.
 	if save_dirty:
 		_save_game()
+
+func _start_story(scene_id: String) -> void:
+	var pages: Array[Dictionary] = Stage.story_dialogue(scene_id)
+	if pages.is_empty():
+		return
+	story_scene_id = scene_id
+	story_pages = pages
+	story_step = 0
+	story_active = true
+	pause_menu_open = false
+	_release_joystick()
+	jump_requested = false
+	queue_redraw()
+
+func _advance_story() -> void:
+	if not story_active:
+		return
+	story_step += 1
+	if story_step >= story_pages.size():
+		_finish_story()
+	else:
+		queue_redraw()
+
+func _finish_story() -> void:
+	if not story_active:
+		return
+	if story_scene_id == "intro":
+		intro_seen = true
+	elif story_scene_id == "checkpoint":
+		checkpoint_story_seen = true
+	story_active = false
+	story_scene_id = ""
+	story_step = 0
+	story_pages.clear()
+	jump_requested = false
+	_mark_save_dirty()
+	queue_redraw()
 
 func _update_level_progress() -> void:
 	_collect_combat_pickups()
@@ -1256,6 +1317,9 @@ func _update_level_progress() -> void:
 			checkpoint_active = true
 			respawn_point = mark
 			_mark_save_dirty()
+			if not checkpoint_story_seen:
+				checkpoint_story_seen = true
+				_start_story("checkpoint")
 
 	var door: Rect2 = Stage.exit_door()
 	if not stage_complete and puzzle_gate_open and grounded:
@@ -1263,14 +1327,23 @@ func _update_level_progress() -> void:
 			if absf(hero_pos.y - door.end.y) < 8.0:
 				finish_medals = medal_count
 				stage_complete = true
+				rescue_complete = true
 				_mark_save_dirty()
 				move_axis = 0.0
 				running = false
 				jump_requested = false
+				_start_story("rescue")
 
 func _restart_stage() -> void:
 	# Recomeca a fase inteira; cair ou levar dano nao apaga o progresso.
 	pause_menu_open = false
+	story_active = false
+	intro_seen = false
+	checkpoint_story_seen = false
+	rescue_complete = false
+	story_step = 0
+	story_scene_id = ""
+	story_pages.clear()
 	health = MAX_HEALTH
 	lives = MAX_LIVES
 	game_over = false
@@ -1315,6 +1388,7 @@ func _restart_stage() -> void:
 	current_animation = "idle"
 	animation_time = 0.0
 	_save_game()
+	_start_story("intro")
 	queue_redraw()
 
 func _respawn() -> void:
@@ -1401,6 +1475,7 @@ func _draw() -> void:
 	for rope in ropes:
 		_draw_rope(rope)
 	_draw_checkpoint()
+	_draw_rescue_npc()
 	_draw_exit_door()
 	for i in range(medals.size()):
 		if not medal_collected[i]:
@@ -1442,6 +1517,8 @@ func _draw() -> void:
 		_draw_finish_screen()
 	elif game_over:
 		_draw_game_over()
+	if story_active:
+		_draw_story_scene()
 
 func _draw_far_buildings() -> void:
 	# Fundo de pano pintado, preso por ganchos e emendas visiveis.
@@ -1848,6 +1925,65 @@ func _draw_low_beam(beam: Rect2) -> void:
 	draw_circle(Vector2(beam.end.x - 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
 	draw_string(ThemeDB.fallback_font, Vector2(mid_x - 23.0, beam.position.y + 15.0), "AGACHE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#392d33"))
 
+func _draw_rescue_npc() -> void:
+	# Figurante presa perto da saida, com visual de cenario televisivo.
+	var npc: Vector2 = Stage.rescue_npc()
+	draw_circle(npc + Vector2(0.0, -76.0), 13.0, Color("#413443"))
+	draw_circle(npc + Vector2(0.0, -75.0), 10.0, Color("#d6b18f"))
+	draw_rect(Rect2(npc.x - 15.0, npc.y - 63.0, 30.0, 42.0), Color("#617988"))
+	draw_rect(Rect2(npc.x - 11.0, npc.y - 59.0, 22.0, 38.0), Color("#86a0a0"))
+	draw_line(npc + Vector2(-7.0, -24.0), npc + Vector2(-7.0, 0.0), Color("#342e42"), 6.0)
+	draw_line(npc + Vector2(7.0, -24.0), npc + Vector2(7.0, 0.0), Color("#342e42"), 6.0)
+	if rescue_complete:
+		draw_line(npc + Vector2(13.0, -55.0), npc + Vector2(25.0, -81.0), Color("#d6b18f"), 5.0)
+		draw_circle(npc + Vector2(25.0, -83.0), 4.0, Color("#d6b18f"))
+	else:
+		draw_line(npc + Vector2(-13.0, -55.0), npc + Vector2(-25.0, -37.0), Color("#d6b18f"), 5.0)
+		draw_line(npc + Vector2(13.0, -55.0), npc + Vector2(23.0, -37.0), Color("#d6b18f"), 5.0)
+	draw_string(ThemeDB.fallback_font, npc + Vector2(-30.0, -98.0), "SOCORRO!" if not rescue_complete else "OBRIGADA!", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f4d7b3"))
+
+func _draw_story_portrait(speaker: String) -> void:
+	var box_area := Rect2(72.0, 78.0, 122.0, 144.0)
+	draw_rect(box_area, Color("#2e2834"))
+	draw_rect(Rect2(77.0, 83.0, 112.0, 134.0), Color("#645663"))
+	if speaker == "CHAPOLIN" and idle_texture != null:
+		# Reutiliza um quadro do sprite aprovado, sem modificar o arquivo.
+		var size := Vector2(float(idle_texture.get_width()) / 8.0, float(idle_texture.get_height()))
+		draw_texture_rect_region(idle_texture, Rect2(90.0, 91.0, 83.0, 125.0), Rect2(0.0, 0.0, size.x, size.y), Color.WHITE, false, true)
+	else:
+		draw_circle(Vector2(133.0, 123.0), 22.0, Color("#413443"))
+		draw_circle(Vector2(133.0, 126.0), 17.0, Color("#d6b18f"))
+		draw_rect(Rect2(108.0, 145.0, 50.0, 65.0), Color("#78929a"))
+		draw_rect(Rect2(120.0, 144.0, 26.0, 62.0), Color("#98aaa4"))
+
+func _draw_story_scene() -> void:
+	# Overlay da historia em 640x360; funciona sem novas texturas ou plugins.
+	if story_step < 0 or story_step >= story_pages.size():
+		return
+	var page: Dictionary = story_pages[story_step]
+	var speaker: String = String(page.get("speaker", ""))
+	draw_rect(Rect2(0.0, 0.0, 640.0, 360.0), Color(0.07, 0.06, 0.09, 0.90))
+	draw_rect(Rect2(38.0, 29.0, 564.0, 310.0), Color("#302936"))
+	draw_rect(Rect2(44.0, 35.0, 552.0, 298.0), Color("#594452"))
+	draw_line(Vector2(45.0, 53.0), Vector2(595.0, 53.0), Color("#c6a57b"), 2.0)
+	var scene_title := "PROLOGO: CIDADE DE PAPELAO"
+	if story_scene_id == "checkpoint":
+		scene_title = "NOVO ACONTECIMENTO"
+	elif story_scene_id == "rescue":
+		scene_title = "DESFECHO: RESGATE"
+	draw_string(ThemeDB.fallback_font, Vector2(72.0, 63.0), scene_title, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f1d1a4"))
+	_draw_story_portrait(speaker)
+	draw_string(ThemeDB.fallback_font, Vector2(221.0, 109.0), speaker, HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color("#f6d69e"))
+	draw_line(Vector2(220.0, 121.0), Vector2(554.0, 121.0), Color("#9f7c68"), 2.0)
+	draw_string(ThemeDB.fallback_font, Vector2(220.0, 157.0), String(page.get("line1", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(220.0, 181.0), String(page.get("line2", "")), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color.WHITE)
+	draw_string(ThemeDB.fallback_font, Vector2(220.0, 216.0), "CENA %d/%d" % [story_step + 1, story_pages.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d8baa1"))
+	draw_rect(STORY_SKIP_RECT, Color("#564957"))
+	draw_rect(STORY_NEXT_RECT, Color("#94734d"))
+	draw_string(ThemeDB.fallback_font, Vector2(80.0, 309.0), "PULAR CENA", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	var continue_label := "CONTINUAR" if story_step + 1 >= story_pages.size() else "PROXIMO"
+	draw_string(ThemeDB.fallback_font, Vector2(424.0, 309.0), continue_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+
 func _draw_chapolin() -> void:
 	var sprite: Texture2D = idle_texture
 	if current_animation == "walk" and walk_texture != null:
@@ -2095,6 +2231,13 @@ func _input(event: InputEvent) -> void:
 			_pointer_moved(motion_event.position, MOUSE_POINTER_ID)
 
 func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
+	if story_active:
+		if STORY_SKIP_RECT.has_point(pos):
+			_finish_story()
+		elif STORY_NEXT_RECT.has_point(pos):
+			_advance_story()
+		queue_redraw()
+		return
 	if (stage_complete or game_over) and Rect2(509.0, 298.0, 120.0, 51.0).has_point(pos):
 		jump_requested = true
 		return
