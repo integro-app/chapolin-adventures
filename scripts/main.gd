@@ -60,7 +60,9 @@ func _draw() -> void:
 		var frame := int(floor(animation_time * fps)) % 8
 		var frame_size := Vector2(float(sprite.get_width()) / 8.0, float(sprite.get_height()))
 		var region := Rect2(float(frame) * frame_size.x, 0.0, frame_size.x, frame_size.y)
-		var dest := Rect2(-frame_size.x / 2.0, -frame_size.y, frame_size.x, frame_size.y)
+		var drawn_height := 101.0
+		var drawn_width := frame_size.x * drawn_height / frame_size.y
+		var dest := Rect2(-drawn_width / 2.0, -drawn_height, drawn_width, drawn_height)
 		draw_set_transform(hero_pos, 0.0, Vector2(float(facing), 1.0))
 		draw_texture_rect_region(sprite, dest, region)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
