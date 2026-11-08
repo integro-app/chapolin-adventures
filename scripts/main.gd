@@ -18,6 +18,7 @@ const CROUCH_SPEED := 92.0
 const CLIMB_SPEED := 90.0
 const JOYSTICK_RADIUS := 51.0
 const JOYSTICK_DEADZONE := 13.0
+const MOUSE_POINTER_ID := -2
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -586,7 +587,7 @@ func _draw_chapolin() -> void:
 func _draw_controls() -> void:
 	# O joystick so aparece enquanto um dedo toca a metade esquerda da tela.
 	# Diagonal para baixo + lateral = caminhar agachado, sem botao dedicado.
-	if joystick_touch_id >= 0:
+	if joystick_touch_id != -1:
 		draw_circle(joystick_origin, JOYSTICK_RADIUS, Color(0.06, 0.12, 0.17, 0.38))
 		draw_arc(joystick_origin, JOYSTICK_RADIUS, 0.0, TAU, 36, Color(0.92, 0.79, 0.62, 0.48), 2.0)
 		draw_circle(joystick_origin, 8.0, Color(0.81, 0.71, 0.59, 0.44))
@@ -601,23 +602,54 @@ func _draw_controls() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(15.0, 26.0), "CIDADE DE PAPELAO  |  CENARIO DE TESTE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f0cfaa"))
 
 func _input(event: InputEvent) -> void:
-	# Cada dedo possui um ID. Um dedo movimenta, o outro pode pular.
+	# Android editor can deliver touch events or mouse events emulated from touch.
+	# Both are mapped into the Node2D canvas coordinate space.
 	if event is InputEventScreenTouch:
-		var screen_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
-		if event.pressed:
-			if joystick_touch_id < 0 and screen_pos.x <= 320.0 and screen_pos.y >= 140.0 and screen_pos.y <= 360.0:
-				joystick_touch_id = event.index
-				joystick_origin = screen_pos
-				joystick_offset = Vector2.ZERO
-				_update_joystick_axes()
-			elif screen_pos.x >= 535.0 and screen_pos.x <= 640.0 and screen_pos.y >= 295.0 and screen_pos.y <= 360.0:
-				jump_requested = true
-		elif event.index == joystick_touch_id:
-			_release_joystick()
-	elif event is InputEventScreenDrag and event.index == joystick_touch_id:
-		var screen_pos: Vector2 = get_viewport().get_canvas_transform().affine_inverse() * event.position
-		joystick_offset = (screen_pos - joystick_origin).limit_length(JOYSTICK_RADIUS)
+		var touch_event: InputEventScreenTouch = make_input_local(event) as InputEventScreenTouch
+		if touch_event.pressed:
+			_pointer_pressed(touch_event.position, touch_event.index)
+		else:
+			_pointer_released(touch_event.index)
+	elif event is InputEventScreenDrag:
+		var drag_event: InputEventScreenDrag = make_input_local(event) as InputEventScreenDrag
+		_pointer_moved(drag_event.position, drag_event.index)
+	elif event is InputEventMouseButton:
+		if event.button_index != MOUSE_BUTTON_LEFT:
+			return
+		var mouse_event: InputEventMouseButton = make_input_local(event) as InputEventMouseButton
+		if mouse_event.pressed:
+			_pointer_pressed(mouse_event.position, MOUSE_POINTER_ID)
+		else:
+			_pointer_released(MOUSE_POINTER_ID)
+	elif event is InputEventMouseMotion:
+		# Do not turn a mere cursor hover into movement.
+		if joystick_touch_id == MOUSE_POINTER_ID and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			var motion_event: InputEventMouseMotion = make_input_local(event) as InputEventMouseMotion
+			_pointer_moved(motion_event.position, MOUSE_POINTER_ID)
+
+func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
+	# The left half is an invisible floating joystick activation zone.
+	if joystick_touch_id == -1 and pos.x >= 0.0 and pos.x <= 320.0 and pos.y >= 90.0 and pos.y <= 360.0:
+		joystick_touch_id = pointer_id
+		joystick_origin = pos
+		joystick_offset = Vector2.ZERO
 		_update_joystick_axes()
+		queue_redraw()
+	elif pos.x >= 510.0 and pos.x <= 640.0 and pos.y >= 285.0 and pos.y <= 360.0:
+		# Keep PULO independent from the joystick finger.
+		jump_requested = true
+
+func _pointer_moved(pos: Vector2, pointer_id: int) -> void:
+	if pointer_id != joystick_touch_id:
+		return
+	joystick_offset = (pos - joystick_origin).limit_length(JOYSTICK_RADIUS)
+	_update_joystick_axes()
+	queue_redraw()
+
+func _pointer_released(pointer_id: int) -> void:
+	if pointer_id == joystick_touch_id:
+		_release_joystick()
+		queue_redraw()
 
 func _update_joystick_axes() -> void:
 	var horizontal := joystick_offset.x
