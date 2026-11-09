@@ -2279,6 +2279,13 @@ func _draw_pause_inventory() -> void:
 	draw_line(Vector2(319.0, 127.0), Vector2(319.0, 234.0), Color("#564654"), 1.0)
 	draw_string(ThemeDB.fallback_font, Vector2(121.0, 138.0), "EQUIPAMENTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e1af79"))
 	draw_string(ThemeDB.fallback_font, Vector2(341.0, 138.0), "PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e1af79"))
+	# Mesmo atlas de icones do gameplay, para continuidade visual.
+	_draw_hud_icon(Vector2(109.0, 157.0), "hammer", 17.0, 1.0 if hammer_unlocked else 0.38)
+	_draw_hud_icon(Vector2(109.0, 185.0), "horn", 17.0, 1.0 if horn_unlocked else 0.38)
+	_draw_hud_icon(Vector2(109.0, 213.0), "nano", 17.0, 1.0 if nano_unlocked else 0.38)
+	_draw_hud_icon(Vector2(329.0, 158.0), "medal", 19.0)
+	_draw_hud_icon(Vector2(329.0, 183.0), "medal", 17.0, 0.72)
+	_draw_hud_icon(Vector2(329.0, 208.0), "hero", 18.0)
 
 	var normal_color := Color("#f1e4d2")
 	var collected_color := Color("#a9d8b4") if hammer_unlocked else Color("#9a8b98")
