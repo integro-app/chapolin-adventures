@@ -1530,6 +1530,7 @@ func _restart_stage() -> void:
 	queue_redraw()
 
 func _respawn() -> void:
+	run_touch_id = -1
 	hero_pos = respawn_point
 	nano_remaining = 0.0
 	hurt_grace = DAMAGE_GRACE
@@ -2833,6 +2834,38 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 		_save_game()
 		queue_redraw()
 		return
+	# HUD v3: botoes com hitboxes proprias, sem sobreposicao.
+	# O desenho e as areas de toque vem da mesma especificacao.
+	if _hud_v3_ready():
+		if HUD_V3_RUN_RECT.has_point(pos):
+			if run_touch_id == -1:
+				run_touch_id = pointer_id
+				queue_redraw()
+			return
+		if HUD_V3_JUMP_RECT.has_point(pos):
+			jump_requested = true
+			return
+		if HUD_V3_USE_RECT.has_point(pos):
+			if _nearby_lever_index() >= 0:
+				_activate_nearby_lever()
+			return
+		if HUD_V3_NANO_RECT.has_point(pos):
+			_use_nano()
+			return
+		if HUD_V3_HORN_RECT.has_point(pos):
+			_use_horn()
+			return
+		if HUD_V3_HAMMER_RECT.has_point(pos):
+			_use_hammer()
+			return
+		if joystick_touch_id == -1 and pos.x >= 0.0 and pos.x <= 320.0 and pos.y >= 90.0 and pos.y <= 360.0:
+			joystick_touch_id = pointer_id
+			joystick_origin = pos
+			joystick_offset = Vector2.ZERO
+			_update_joystick_axes()
+			queue_redraw()
+		return
+
 	# Botao contextual de alavanca, sem mexer nos ataques e no joystick.
 	if Rect2(535.0, 208.0, 90.0, 44.0).has_point(pos) and _nearby_lever_index() >= 0:
 		_activate_nearby_lever()
@@ -2862,6 +2895,9 @@ func _pointer_moved(pos: Vector2, pointer_id: int) -> void:
 	queue_redraw()
 
 func _pointer_released(pointer_id: int) -> void:
+	if pointer_id == run_touch_id:
+		run_touch_id = -1
+		queue_redraw()
 	if pointer_id == joystick_touch_id:
 		_release_joystick()
 		queue_redraw()
