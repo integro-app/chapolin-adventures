@@ -324,14 +324,20 @@ func _physics_process(delta: float) -> void:
 		_handle_ledge(delta)
 		if not _check_threat_collisions(previous_foot_y):
 			_update_level_progress()
+		_update_camera(delta)
+		queue_redraw()
 		return
 	if _handle_rope(delta):
 		if not _check_threat_collisions(previous_foot_y):
 			_update_level_progress()
+		_update_camera(delta)
+		queue_redraw()
 		return
 	if _handle_ladder(delta):
 		if not _check_threat_collisions(previous_foot_y):
 			_update_level_progress()
+		_update_camera(delta)
+		queue_redraw()
 		return
 	var axis := Input.get_axis("ui_left", "ui_right")
 	if absf(axis) < 0.1:
@@ -396,6 +402,8 @@ func _physics_process(delta: float) -> void:
 	if _try_grab_ledge():
 		if not _check_threat_collisions(previous_foot_y):
 			_update_level_progress()
+		_update_camera(delta)
+		queue_redraw()
 		return
 
 	if grounded:
@@ -438,11 +446,15 @@ func _physics_process(delta: float) -> void:
 	else:
 		animation_time += delta
 
-	# A câmera acompanha suavemente, respeitando as bordas do mundo.
-	var camera_target := clampf(hero_pos.x - 215.0, 0.0, Stage.WORLD_WIDTH - SCREEN_WIDTH)
-	camera_x = lerpf(camera_x, camera_target, minf(1.0, delta * 6.5))
+	# A camera agora usa o mesmo seguimento em todos os modos.
+	_update_camera(delta)
 	queue_redraw()
 
+
+func _update_camera(delta: float) -> void:
+	# Nao deixa a camera congelar ao usar corda, escada ou agarrar bordas.
+	var target: float = clampf(hero_pos.x - 215.0, 0.0, Stage.WORLD_WIDTH - SCREEN_WIDTH)
+	camera_x = lerpf(camera_x, target, minf(1.0, delta * 6.5))
 
 func _rope_near(x: float, y: float) -> Vector3:
 	# Colisao real com o corpo: pode agarrar no meio da corda ou na ponta.
