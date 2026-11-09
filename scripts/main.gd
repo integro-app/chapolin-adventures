@@ -1593,13 +1593,8 @@ func _draw() -> void:
 		_draw_stage_lighting()
 
 	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
-	# Cenografia PROCEDURAL antiga pertence somente ao fallback sem arte final.
-	# Antes, esses objetos (camera preta, placas, postes e arbustos) eram
-	# desenhados SOBRE os PNGs aprovados, parecendo uma segunda HUD.
-	# A cena ilustrada agora usa suas proprias camadas, sem duplicacoes.
-	if city_bg_art == null or city_mid_art == null or city_set_art == null:
-		_draw_decoration()
-		_draw_studio_set_details()
+	# Sem cenografia procedural do prototipo sobre a arte aprovada.
+	# Escadas, plataformas, caixas e elementos funcionais permanecem.
 	for ladder in ladders:
 		_draw_ladder(ladder)
 	for surface in ground_segments:
@@ -1876,70 +1871,6 @@ func _draw_stage_lighting() -> void:
 		draw_rect(Rect2(x - 8.0, 51.0, 16.0, 3.0), Color("#efc189"))
 		draw_circle(Vector2(x, 53.0), 15.0, Color(1.0, 0.78, 0.45, 0.12))
 
-func _draw_decoration() -> void:
-	# Objetos fisicos decorativos; plataformas e caixas seguem as colisoes originais.
-	for x in [126.0, 924.0, 1440.0, 1935.0, 2263.0]:
-		draw_rect(Rect2(x, 207.0, 5.0, 93.0), Color("#52413c"))
-		draw_rect(Rect2(x - 16.0, 201.0, 37.0, 8.0), Color("#aa865e"))
-		draw_line(Vector2(x - 5.0, 209.0), Vector2(x + 11.0, 222.0), Color("#f1d6a7"), 2.0)
-		draw_circle(Vector2(x + 3.0, 224.0), 10.0, Color("#d9a56c"))
-		draw_circle(Vector2(x + 3.0, 224.0), 6.0, Color("#f6cf8c"))
-	# Arbustos evidentemente recortados de papelao.
-	for x in [98.0, 415.0, 879.0, 1332.0, 1690.0, 2180.0]:
-		draw_rect(Rect2(x - 3.0, 282.0, 14.0, 18.0), Color("#694832"))
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(x - 22.0, 280.0),
-			Vector2(x - 6.0, 246.0),
-			Vector2(x + 8.0, 266.0),
-			Vector2(x + 19.0, 252.0),
-			Vector2(x + 25.0, 280.0)
-		]), Color("#637659"))
-		draw_line(Vector2(x - 3.0, 282.0), Vector2(x + 2.0, 294.0), Color("#c09e77"), 2.0)
-	# Plaquinha de bastidor.
-	draw_rect(Rect2(80.0, 258.0, 91.0, 29.0), Color("#684b43"))
-	draw_rect(Rect2(84.0, 261.0, 83.0, 22.0), Color("#d6b78a"))
-	draw_string(ThemeDB.fallback_font, Vector2(90.0, 277.0), "NAO APOIAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#49382f"))
-	draw_circle(Vector2(88.0, 265.0), 1.5, Color("#846245"))
-	draw_circle(Vector2(164.0, 265.0), 1.5, Color("#846245"))
-	# Montanha que encobre uma escada de servico (recurso cenografico visual).
-	for x in [720.0, 1610.0]:
-		draw_line(Vector2(x, 255.0), Vector2(x + 46.0, 298.0), Color("#705343"), 3.0)
-		draw_line(Vector2(x + 46.0, 255.0), Vector2(x, 298.0), Color("#705343"), 3.0)
-		draw_line(Vector2(x + 23.0, 255.0), Vector2(x + 23.0, 300.0), Color("#55413b"), 3.0)
-
-func _draw_studio_set_details() -> void:
-	# Cenografia nao-colisiva inspirada no estudio de televisao da referencia.
-	# Totens, refletores, letreiros e objetos ao fundo das plataformas.
-	draw_rect(Rect2(25.0, 118.0, 132.0, 80.0), Color("#4b3542"))
-	draw_rect(Rect2(30.0, 123.0, 122.0, 70.0), Color("#d7b18b"))
-	draw_rect(Rect2(33.0, 126.0, 116.0, 64.0), Color("#d8b78d"))
-	draw_string(ThemeDB.fallback_font, Vector2(43.0, 151.0), "CIDADE DE", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#68444b"))
-	draw_string(ThemeDB.fallback_font, Vector2(39.0, 178.0), "PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 23, Color("#5d3940"))
-	for pole_x in [35.0, 147.0]:
-		draw_line(Vector2(pole_x, 193.0), Vector2(pole_x, 300.0), Color("#77503d"), 6.0)
-		draw_line(Vector2(pole_x, 202.0), Vector2(pole_x + 19.0, 286.0), Color("#aa7550"), 3.0)
-	# Claquete e camara televisiva junto ao primeiro trecho, fora dos controles.
-	draw_rect(Rect2(18.0, 264.0, 43.0, 28.0), Color("#282637"))
-	draw_rect(Rect2(24.0, 270.0, 31.0, 16.0), Color("#514b5f"))
-	draw_circle(Vector2(21.0, 265.0), 8.0, Color("#25243b"))
-	draw_circle(Vector2(52.0, 265.0), 8.0, Color("#25243b"))
-	draw_line(Vector2(30.0, 292.0), Vector2(19.0, 316.0), Color("#50455c"), 3.0)
-	draw_line(Vector2(45.0, 292.0), Vector2(53.0, 316.0), Color("#50455c"), 3.0)
-	draw_line(Vector2(38.0, 292.0), Vector2(38.0, 318.0), Color("#50455c"), 3.0)
-	# Placas de cinema ao lado da segunda alavanca; nao escondem o comando.
-	draw_rect(Rect2(1960.0, 140.0, 116.0, 78.0), Color("#674856"))
-	draw_rect(Rect2(1965.0, 145.0, 106.0, 68.0), Color("#d2ad84"))
-	draw_string(ThemeDB.fallback_font, Vector2(1974.0, 168.0), "GRANDE", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color("#79404b"))
-	draw_string(ThemeDB.fallback_font, Vector2(1974.0, 190.0), "ESPETACULO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#79404b"))
-	draw_string(ThemeDB.fallback_font, Vector2(1986.0, 207.0), "DA TV", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#79404b"))
-	# Lanternas de cena em locais especificos, com pulsacao suave.
-	for lamp_x in [432.0, 963.0, 1846.0, 2224.0]:
-		var light_y := 177.0 if lamp_x < 1000.0 else 186.0
-		var flicker: float = 0.83 + sin(scene_ambience_clock * 2.3 + lamp_x) * 0.08
-		draw_rect(Rect2(lamp_x - 7.0, light_y - 8.0, 14.0, 16.0), Color("#4c2c42"))
-		draw_rect(Rect2(lamp_x - 3.0, light_y - 5.0, 6.0, 10.0), Color(1.0, 0.49 * flicker, 0.30 * flicker))
-		draw_circle(Vector2(lamp_x, light_y), 17.0, Color(1.0, 0.38, 0.18, 0.09 * flicker))
-
 func _draw_art_floor(surface: Rect2) -> void:
 	# Faixa da madeira produzida na arte: acompanha o topo colidivel.
 	# O original inteiro NAO e colado sobre a fase (evita pisos falsos).
@@ -2022,8 +1953,7 @@ func _draw_nano_tunnel(tunnel: Rect2) -> void:
 	draw_rect(Rect2(tunnel.position.x + 3.0, tunnel.position.y + 2.0, tunnel.size.x - 6.0, tunnel.size.y - 5.0), Color("#bd926d"))
 	draw_line(Vector2(tunnel.position.x, tunnel.end.y - 2.0), Vector2(tunnel.end.x, tunnel.end.y - 2.0), Color("#f0c79d"), 3.0)
 	draw_line(tunnel.position + Vector2(5.0, 2.0), tunnel.end - Vector2(5.0, 2.0), Color("#795356"), 2.0)
-	if city_set_art == null:
-		draw_string(ThemeDB.fallback_font, Vector2(tunnel.position.x + 3.0, tunnel.position.y - 8.0), "NANICOLINA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#ffe7ae"))
+	# Passagem sem etiqueta; colisao e dimensoes originais mantidas.
 
 func _draw_nano_pickup(pos: Vector2) -> void:
 	draw_circle(pos + Vector2(1.0, 2.0), 13.0, Color("#443841"))
@@ -2040,10 +1970,7 @@ func _draw_fragile_wall(wall: Rect2) -> void:
 	draw_line(wall.position + Vector2(5.0, 4.0), wall.position + Vector2(15.0, 18.0), Color("#694d4a"), 2.0)
 	draw_line(wall.position + Vector2(15.0, 18.0), wall.position + Vector2(8.0, 30.0), Color("#694d4a"), 2.0)
 	draw_line(wall.position + Vector2(8.0, 30.0), wall.position + Vector2(17.0, 40.0), Color("#694d4a"), 2.0)
-	# O tutorial antigo imprimia MARRETA sobre o cenário final.
-	# Mantemos o rótulo apenas no fallback sem a arte dos objetos.
-	if city_set_art == null:
-		draw_string(ThemeDB.fallback_font, wall.position + Vector2(-13.0, -8.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f0d09e"))
+	# Sem rotulo do prototipo: a rachadura identifica o painel.
 
 func _draw_paper_debris(wall: Rect2, time_left: float) -> void:
 	var progress: float = 1.0 - time_left / BREAK_EFFECT_SECONDS
@@ -2247,8 +2174,7 @@ func _draw_ladder(ladder: Rect2) -> void:
 		rung_y += 12.0
 
 func _draw_low_beam(beam: Rect2) -> void:
-	# Decorative hanging scenery plank with real gameplay collision.
-	var mid_x := beam.position.x + beam.size.x / 2.0
+	# Viga decorativa com colisao de jogo preservada.
 	draw_line(Vector2(beam.position.x + 6.0, 111.0), Vector2(beam.position.x + 6.0, beam.position.y), Color("#d1b597"), 2.0)
 	draw_line(Vector2(beam.end.x - 6.0, 111.0), Vector2(beam.end.x - 6.0, beam.position.y), Color("#d1b597"), 2.0)
 	draw_rect(beam, Color("#553a34"))
@@ -2256,8 +2182,7 @@ func _draw_low_beam(beam: Rect2) -> void:
 	draw_line(Vector2(beam.position.x, beam.end.y - 3.0), Vector2(beam.end.x, beam.end.y - 3.0), Color("#e1c393"), 3.0)
 	draw_circle(Vector2(beam.position.x + 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
 	draw_circle(Vector2(beam.end.x - 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
-	if city_set_art == null:
-		draw_string(ThemeDB.fallback_font, Vector2(mid_x - 23.0, beam.position.y + 15.0), "AGACHE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#392d33"))
+	# Sem etiqueta do prototipo sobre a viga.
 
 func _draw_rescue_npc() -> void:
 	# Figurante presa perto da saida, com visual de cenario televisivo.
@@ -2439,9 +2364,7 @@ func _draw_lever(index: int) -> void:
 	var handle_direction: float = 1.0 if activated else -1.0
 	draw_line(base + Vector2(0.0, -24.0), base + Vector2(handle_direction * 14.0, -43.0), Color("#c2a58a"), 4.0)
 	draw_circle(base + Vector2(handle_direction * 14.0, -43.0), 6.0, Color("#70ba7c") if activated else Color("#e3a960"))
-	if city_set_art == null:
-		var name: String = "GRADE" if index == 0 else "PLATAFORMA"
-		draw_string(ThemeDB.fallback_font, base + Vector2(-27.0, -53.0), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e9d1ad"))
+	# A alavanca usa luz de estado; HUD contextual continua exibindo USAR.
 	var status_color := Color("#7fc38d") if activated else Color("#d6aa75")
 	draw_circle(base + Vector2(0.0, -16.0), 3.0, status_color)
 
