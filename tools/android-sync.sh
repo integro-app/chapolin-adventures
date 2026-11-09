@@ -3,7 +3,7 @@
 # Requer Termux: pkg install git rsync tar; termux-setup-storage.
 set -euo pipefail
 
-REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="${CHAPOLIN_REPO_DIR:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
 DEST_DIR="${CHAPOLIN_GODOT_DIR:-$HOME/storage/shared/Documents/ChapolinAdventures}"
 OFFICIAL_REMOTE="https://github.com/integro-app/chapolin-adventures.git"
 
