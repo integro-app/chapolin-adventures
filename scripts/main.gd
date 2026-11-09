@@ -74,6 +74,7 @@ const TITLE_PLAY_RECT := Rect2(60.0, 245.0, 211.0, 54.0)
 const TITLE_NEW_RECT := Rect2(286.0, 245.0, 211.0, 54.0)
 const STAGE_BANNER_DURATION := 3.4
 const HUD_PAUSE_RECT := Rect2(572.0, 4.0, 62.0, 48.0)
+const SOUND_TOGGLE_RECT := Rect2(420.0, 65.0, 113.0, 36.0)
 
 var hero_pos := Vector2(120.0, 300.0)
 var vertical_speed := 0.0
@@ -189,6 +190,8 @@ var pause_menu_open := false
 var save_dirty := false
 var save_delay := 0.0
 var save_notice_time := 0.0
+var sound_enabled := true
+var sfx_players: Dictionary = {}
 var low_beams: Array[Rect2] = []
 var ladders: Array[Rect2] = []
 var ropes: Array[Vector3] = []
@@ -271,6 +274,7 @@ func _ready() -> void:
 		run_texture = load("res://assets/chapolin/run.png")
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
+	_setup_sfx()
 	# A tela inicial deixa o jogador escolher continuar ou iniciar a aventura.
 	title_has_save = FileAccess.file_exists(SAVE_PATH)
 	_load_game()
@@ -456,6 +460,28 @@ func _physics_process(delta: float) -> void:
 	_update_camera(delta)
 	queue_redraw()
 
+
+func _setup_sfx() -> void:
+	# Dez efeitos 16-bit originais; players independentes permitem sons simultaneos.
+	for name in ["jump", "land", "hurt", "hammer", "horn", "pickup", "checkpoint", "lever", "nano", "enemy"]:
+		var path: String = "res://assets/sfx/%s.wav" % name
+		if not ResourceLoader.exists(path):
+			continue
+		var audio: AudioStream = load(path) as AudioStream
+		if audio == null:
+			continue
+		var player := AudioStreamPlayer.new()
+		player.stream = audio
+		player.volume_db = -11.0
+		add_child(player)
+		sfx_players[name] = player
+
+func _play_sfx(name: String) -> void:
+	if not sound_enabled or not sfx_players.has(name):
+		return
+	var player: AudioStreamPlayer = sfx_players[name] as AudioStreamPlayer
+	if player != null:
+		player.play()
 
 func _update_camera(delta: float) -> void:
 	# Nao deixa a camera congelar ao usar corda, escada ou agarrar bordas.
@@ -1238,7 +1264,8 @@ func _save_game() -> void:
 		"game_over": game_over,
 		"intro_seen": intro_seen,
 		"checkpoint_story_seen": checkpoint_story_seen,
-		"rescue_complete": rescue_complete
+		"rescue_complete": rescue_complete,
+		"sound_enabled": sound_enabled
 	}
 	var save_file: FileAccess = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if save_file == null:
@@ -1315,6 +1342,7 @@ func _load_game() -> void:
 	stage_complete = bool(data.get("stage_complete", false))
 	game_over = bool(data.get("game_over", false)) or lives == 0
 	# Saves antigos nao devem interromper o jogador com cenas inesperadas.
+	sound_enabled = bool(data.get("sound_enabled", true))
 	intro_seen = bool(data.get("intro_seen", true))
 	checkpoint_story_seen = bool(data.get("checkpoint_story_seen", checkpoint_active))
 	rescue_complete = bool(data.get("rescue_complete", stage_complete))
@@ -2309,6 +2337,9 @@ func _draw_pause_inventory() -> void:
 	draw_rect(Rect2(94.0, 50.0, 452.0, 3.0), Color("#c99b65"))
 	draw_string(ThemeDB.fallback_font, Vector2(119.0, 85.0), "JOGO PAUSADO", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color("#f5d5a7"))
 	draw_string(ThemeDB.fallback_font, Vector2(120.0, 105.0), "INVENTARIO E PROGRESSO", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#bfb0ac"))
+	draw_rect(SOUND_TOGGLE_RECT, Color("#3c645b") if sound_enabled else Color("#514453"))
+	draw_rect(Rect2(424.0, 69.0, 105.0, 28.0), Color("#293a41") if sound_enabled else Color("#342b3d"))
+	draw_string(ThemeDB.fallback_font, Vector2(433.0, 89.0), "SOM: LIGADO" if sound_enabled else "SOM: MUDO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c9ebd4") if sound_enabled else Color("#d7c0c5"))
 	draw_line(Vector2(118.0, 113.0), Vector2(522.0, 113.0), Color("#564654"), 1.5)
 	draw_line(Vector2(319.0, 127.0), Vector2(319.0, 234.0), Color("#564654"), 1.0)
 	draw_string(ThemeDB.fallback_font, Vector2(121.0, 138.0), "EQUIPAMENTOS", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#e1af79"))
@@ -2642,7 +2673,10 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 		jump_requested = true
 		return
 	if pause_menu_open:
-		if Rect2(140.0, 251.0, 166.0, 43.0).has_point(pos):
+		if SOUND_TOGGLE_RECT.has_point(pos):
+			sound_enabled = not sound_enabled
+			_save_game()
+		elif Rect2(140.0, 251.0, 166.0, 43.0).has_point(pos):
 			pause_menu_open = false
 		elif Rect2(332.0, 251.0, 166.0, 43.0).has_point(pos):
 			_restart_stage()
