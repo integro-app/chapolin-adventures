@@ -1593,8 +1593,13 @@ func _draw() -> void:
 		_draw_stage_lighting()
 
 	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
-	_draw_decoration()
-	_draw_studio_set_details()
+	# Cenografia PROCEDURAL antiga pertence somente ao fallback sem arte final.
+	# Antes, esses objetos (camera preta, placas, postes e arbustos) eram
+	# desenhados SOBRE os PNGs aprovados, parecendo uma segunda HUD.
+	# A cena ilustrada agora usa suas proprias camadas, sem duplicacoes.
+	if city_bg_art == null or city_mid_art == null or city_set_art == null:
+		_draw_decoration()
+		_draw_studio_set_details()
 	for ladder in ladders:
 		_draw_ladder(ladder)
 	for surface in ground_segments:
