@@ -382,6 +382,7 @@ func _physics_process(delta: float) -> void:
 	jump_requested = false
 	if is_jumping:
 		feedback.burst(hero_pos + Vector2(0.0, -3.0), "jump")
+		_play_sfx("jump")
 		grounded = false
 		vertical_speed = JUMP_SPEED
 		air_time = 0.0
@@ -419,6 +420,7 @@ func _physics_process(delta: float) -> void:
 		if not was_grounded:
 			landing_timer = 0.16
 			feedback.burst(hero_pos + Vector2(0.0, -2.0), "land")
+			_play_sfx("land")
 		else:
 			landing_timer = maxf(0.0, landing_timer - delta)
 	else:
@@ -708,6 +710,7 @@ func _activate_nearby_lever() -> void:
 	lever_states[index] = true
 	_mark_save_dirty()
 	feedback.burst(Vector2(lever_points[index].x, lever_points[index].y - 32.0), "checkpoint", "ATIVADO")
+	_play_sfx("lever")
 	queue_redraw()
 
 func _setup_moving_platforms() -> void:
@@ -1015,6 +1018,7 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 			enemy_active[i] = false
 			_mark_save_dirty()
 			feedback.burst(enemy_pos + Vector2(0.0, -16.0), "enemy", "DERROTADO")
+			_play_sfx("enemy")
 			hero_pos.y = enemy_top - 3.0
 			grounded = false
 			vertical_speed = ENEMY_STOMP_BOUNCE
@@ -1037,6 +1041,7 @@ func _take_damage(source_x: float) -> void:
 	health -= 1
 	_mark_save_dirty()
 	feedback.burst(hero_pos + Vector2(0.0, -48.0), "hurt", "-1 CORACAO")
+	_play_sfx("hurt")
 	if health <= 0:
 		_lose_life()
 		return
@@ -1110,6 +1115,7 @@ func _use_nano() -> void:
 	nano_charges -= 1
 	_mark_save_dirty()
 	feedback.burst(hero_pos + Vector2(0.0, -39.0), "nano", "NANICOLINA")
+	_play_sfx("nano")
 	nano_remaining = NANO_DURATION
 	is_crouching = false
 	running = false
@@ -1127,12 +1133,14 @@ func _collect_nano_pickups() -> void:
 			nano_unlocked = true
 			nano_charges = NANO_MAX_CHARGES
 			feedback.burst(pickup, "pickup", "NANICOLINA +3")
+			_play_sfx("pickup")
 
 func _use_hammer() -> void:
 	if stage_complete or game_over or not hammer_unlocked or hammer_cooldown > 0.0:
 		return
 	hammer_cooldown = HAMMER_COOLDOWN
 	hammer_swing_time = HAMMER_SWING_DURATION
+	_play_sfx("hammer")
 	# Golpe frontal de curto alcance, em terra, escada ou corda.
 	for i in range(enemy_positions.size()):
 		if not enemy_active[i]:
@@ -1165,6 +1173,7 @@ func _use_horn() -> void:
 	horn_charges -= 1
 	_mark_save_dirty()
 	feedback.burst(hero_pos + Vector2(float(facing) * 24.0, -48.0), "horn")
+	_play_sfx("horn")
 	horn_cooldown = HORN_COOLDOWN
 	horn_effect_time = HORN_EFFECT_DURATION
 	horn_blast_origin = hero_pos + Vector2(float(facing) * 28.0, -48.0)
@@ -1202,6 +1211,7 @@ func _collect_combat_pickups() -> void:
 			horn_charges = HORN_MAX_CHARGES
 		var caption: String = "MARRETA" if kind == 1 else ("CORNETA" if kind == 2 else "CARGAS +3")
 		feedback.burst(Vector2(pickup.x, pickup.y), "pickup", caption)
+		_play_sfx("pickup")
 
 func _collect_secret_rewards() -> void:
 	for i in range(secret_rewards.size()):
@@ -1220,6 +1230,7 @@ func _collect_secret_rewards() -> void:
 		else:
 			lives = mini(SECRET_LIFE_LIMIT, lives + 1)
 		feedback.burst(reward, "secret", "CURA +1" if i == 0 else "VIDA EXTRA")
+		_play_sfx("pickup")
 		_mark_save_dirty()
 
 func _mark_save_dirty() -> void:
@@ -1411,6 +1422,7 @@ func _update_level_progress() -> void:
 			medal_count += 1
 			_mark_save_dirty()
 			feedback.burst(medal, "medal", "+ MEDALHA")
+			_play_sfx("pickup")
 
 	var mark: Vector2 = Stage.checkpoint()
 	if not checkpoint_active and grounded:
@@ -1419,6 +1431,7 @@ func _update_level_progress() -> void:
 			respawn_point = mark
 			_mark_save_dirty()
 			feedback.burst(mark + Vector2(0.0, -52.0), "checkpoint", "CHECKPOINT!")
+			_play_sfx("checkpoint")
 			if not checkpoint_story_seen:
 				checkpoint_story_seen = true
 				_start_story("checkpoint")
