@@ -1660,11 +1660,8 @@ func _draw() -> void:
 		draw_texture_rect(city_lights_art, Rect2(0.0, 0.0, SCREEN_WIDTH, 360.0), false, Color(1.0, 1.0, 1.0, 0.67))
 	_draw_cinematic_atmosphere()
 	_draw_controls()
-	# A HUD v3 ja identifica o prologo na barra superior. Nao sobrepor
-	# a cartela antiga de capitulo sobre o cenario e os novos controles.
-	# A cartela continua disponivel apenas no modo de compatibilidade.
-	if not _hud_v3_ready() and stage_banner_timer > 0.0 and not story_active and not title_active and not pause_menu_open:
-		_draw_stage_banner()
+	# A cartela antiga de prologo foi aposentada: a HUD v3 ja mostra
+	# titulo e objetivo. Nao desenhar nenhum segundo banner durante a fase.
 	if pause_menu_open:
 		_draw_pause_inventory()
 	if stage_complete:
@@ -1701,16 +1698,6 @@ func _draw_cinematic_atmosphere() -> void:
 		var x: float = fposmod(35.0 + float(i * 71) + drift - camera_x * 0.07, 640.0)
 		var y: float = 85.0 + float((i * 41) % 192) + sin(scene_ambience_clock * 0.6 + float(i)) * 7.0
 		draw_circle(Vector2(x, y), 1.3 if i % 3 == 0 else 0.8, Color(0.98, 0.84, 0.63, 0.24))
-
-func _draw_stage_banner() -> void:
-	# Cartela cinematografica de poucos segundos, sem pausar a partida.
-	var visible_alpha: float = clampf(stage_banner_timer / 0.45, 0.0, 1.0)
-	var elapsed: float = STAGE_BANNER_DURATION - stage_banner_timer
-	visible_alpha *= clampf(elapsed / 0.40, 0.0, 1.0)
-	draw_rect(Rect2(168.0, 112.0, 304.0, 66.0), Color(0.05, 0.06, 0.10, 0.81 * visible_alpha))
-	draw_rect(Rect2(168.0, 112.0, 4.0, 66.0), Color(0.86, 0.56, 0.24, visible_alpha))
-	draw_string(ThemeDB.fallback_font, Vector2(186.0, 134.0), "CAPITULO 00 - PROLOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.99, 0.85, 0.65, visible_alpha))
-	draw_string(ThemeDB.fallback_font, Vector2(186.0, 160.0), "CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 21, Color(1.0, 0.96, 0.87, visible_alpha))
 
 func _draw_title_screen() -> void:
 	# Abertura com tipografia, escudo e o sprite oficial do personagem.
