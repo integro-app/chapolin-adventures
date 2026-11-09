@@ -1660,7 +1660,10 @@ func _draw() -> void:
 		draw_texture_rect(city_lights_art, Rect2(0.0, 0.0, SCREEN_WIDTH, 360.0), false, Color(1.0, 1.0, 1.0, 0.67))
 	_draw_cinematic_atmosphere()
 	_draw_controls()
-	if stage_banner_timer > 0.0 and not story_active and not title_active and not pause_menu_open:
+	# A HUD v3 ja identifica o prologo na barra superior. Nao sobrepor
+	# a cartela antiga de capitulo sobre o cenario e os novos controles.
+	# A cartela continua disponivel apenas no modo de compatibilidade.
+	if not _hud_v3_ready() and stage_banner_timer > 0.0 and not story_active and not title_active and not pause_menu_open:
 		_draw_stage_banner()
 	if pause_menu_open:
 		_draw_pause_inventory()
@@ -2698,9 +2701,14 @@ func _draw_controls_v3() -> void:
 		draw_string(ThemeDB.fallback_font, Vector2(579.0, 81.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#b3dfb4"))
 
 func _draw_controls() -> void:
+	# Um unico caminho de desenho: HUD premium OU fallback — nunca ambas.
 	if _hud_v3_ready():
 		_draw_controls_v3()
-		return
+	else:
+		_draw_controls_legacy()
+
+func _draw_controls_legacy() -> void:
+	# Apenas reserva de compatibilidade quando faltar alguma arte da HUD v3.
 	# Joystick invisivel ate o dedo esquerdo encostar, preservando multitouch.
 	if joystick_touch_id != -1:
 		draw_circle(joystick_origin, JOYSTICK_RADIUS + 2.0, Color(0.08, 0.10, 0.17, 0.36))
