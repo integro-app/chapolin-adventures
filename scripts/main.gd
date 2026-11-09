@@ -199,6 +199,7 @@ var pause_menu_open := false
 var save_dirty := false
 var save_delay := 0.0
 var save_notice_time := 0.0
+var installed_build := "SEM MARCADOR"
 var sound_enabled := true
 var sfx_players: Dictionary = {}
 var low_beams: Array[Rect2] = []
@@ -220,6 +221,14 @@ var run_texture: Texture2D
 var jump_texture: Texture2D
 
 func _ready() -> void:
+	# A revisao mostrada no menu identifica QUAL copia foi aberta no Godot.
+	# O sincronizador grava o arquivo na pasta do projeto depois do download.
+	var build_file: FileAccess = FileAccess.open("res://CHAPOLIN_VERSAO.txt", FileAccess.READ)
+	if build_file != null:
+		for build_line in build_file.get_as_text().split("\n"):
+			if build_line.begins_with("Commit: "):
+				installed_build = build_line.substr(8, 12)
+				break
 	# Pixel-art filtering prevents neighboring atlas pixels bleeding into frames.
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ground_segments = Stage.ground()
@@ -2407,6 +2416,7 @@ func _draw_pause_inventory() -> void:
 	draw_rect(Rect2(336.0, 255.0, 158.0, 35.0), Color("#945e50"))
 	draw_string(ThemeDB.fallback_font, Vector2(178.0, 279.0), "CONTINUAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#f8eedf"))
 	draw_string(ThemeDB.fallback_font, Vector2(355.0, 279.0), "REINICIAR FASE", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color("#f8eedf"))
+	draw_string(ThemeDB.fallback_font, Vector2(385.0, 302.0), "BUILD " + installed_build, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#ab9ca4"))
 
 func _draw_lever(index: int) -> void:
 	var lever: Vector3 = lever_points[index]
