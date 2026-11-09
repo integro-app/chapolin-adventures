@@ -2665,7 +2665,8 @@ func _draw_controls_v3() -> void:
 
 	# HUD superior: a arte aprovada recebe apenas textos e numeros dinamicos.
 	draw_texture_rect(hud_v3_bar, Rect2(0.0, 0.0, 640.0, 64.0), false)
-	draw_string(ThemeDB.fallback_font, Vector2(143.0, 29.0), "CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#fff0da"))
+	draw_string(ThemeDB.fallback_font, Vector2(144.0, 18.0), "PRÓLOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#dfa96b"))
+	draw_string(ThemeDB.fallback_font, Vector2(143.0, 32.0), "CIDADE DE PAPELÃO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#fff0da"))
 	var objective: String = "EMPURRE A CAIXA"
 	if puzzle_gate_open and not checkpoint_active:
 		objective = "SIGA AO CHECKPOINT"
