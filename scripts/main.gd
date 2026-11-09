@@ -2582,7 +2582,116 @@ func _draw_hud_count(center: Vector2, quantity: int) -> void:
 	draw_arc(center, 9.0, 0.0, TAU, 20, Color("#cfaa75"), 1.3)
 	draw_string(ThemeDB.fallback_font, center + Vector2(-3.0 if quantity < 10 else -6.0, 4.0), "%d" % quantity, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff2d8"))
 
+func _hud_v3_ready() -> bool:
+	return hud_v3_bar != null and hud_v3_icons != null and hud_v3_controls != null
+
+func _draw_hud_v3_icon(center: Vector2, index: int, diameter: float, opacity: float = 1.0) -> void:
+	# Icones de 112x112 em grade 4x4, todos extraidos da arte aprovada.
+	if hud_v3_icons == null:
+		return
+	var column: int = index % 4
+	var row: int = int(floor(float(index) / 4.0))
+	var region := Rect2(float(column) * 112.0, float(row) * 112.0, 112.0, 112.0)
+	var dest := Rect2(center - Vector2.ONE * diameter * 0.5, Vector2.ONE * diameter)
+	draw_texture_rect_region(hud_v3_icons, dest, region, Color(1.0, 1.0, 1.0, opacity))
+
+func _draw_hud_v3_control(center: Vector2, index: int, diameter: float, opacity: float = 1.0) -> void:
+	# Joystick, PULO, USAR, CORRER e aneis em grade 3x2 de 136px.
+	if hud_v3_controls == null:
+		return
+	var column: int = index % 3
+	var row: int = int(floor(float(index) / 3.0))
+	var region := Rect2(float(column) * 136.0, float(row) * 136.0, 136.0, 136.0)
+	var dest := Rect2(center - Vector2.ONE * diameter * 0.5, Vector2.ONE * diameter)
+	draw_texture_rect_region(hud_v3_controls, dest, region, Color(1.0, 1.0, 1.0, opacity))
+
+func _draw_hud_v3_tool(center: Vector2, icon_index: int, enabled: bool, progress: float = 0.0) -> void:
+	# As ferramentas sao menores que os comandos principais e nunca invadem a
+	# area do joystick. Mantem todas as habilidades existentes no jogo.
+	var alpha: float = 0.88 if enabled else 0.36
+	_draw_hud_v3_control(center, 5, 47.0, alpha)
+	_draw_hud_v3_icon(center, icon_index, 37.0, 1.0 if enabled else 0.32)
+	if progress > 0.0 and enabled:
+		draw_arc(center, 24.0, -PI * 0.5, -PI * 0.5 + TAU * (1.0 - clampf(progress, 0.0, 1.0)), 24, Color("#eec98c"), 2.0)
+
+func _hud_v3_moved_crates() -> int:
+	# O contador de caixas acompanha deslocamentos reais e salvos.
+	var initial: Array[Rect2] = Stage.crates()
+	var moved := 0
+	for i in range(mini(initial.size(), crates.size())):
+		if absf(crates[i].position.x - initial[i].position.x) > 4.0:
+			moved += 1
+	return moved
+
+func _draw_controls_v3() -> void:
+	# Joystick com referencia visual permanente. O toque real continua
+	# flutuante, sem exigir que o dedo comece no centro do anel.
+	var base: Vector2 = Vector2(80.0, 296.0) if joystick_touch_id == -1 else joystick_origin
+	_draw_hud_v3_control(base, 0, 108.0, 0.48 if joystick_touch_id == -1 else 0.78)
+	if joystick_touch_id != -1:
+		var knob: Vector2 = base + joystick_offset
+		_draw_hud_v3_control(knob, 1, 43.0, 0.94)
+
+	# Ferramentas especiais ocupam uma faixa secundaria; nenhum botao
+	# sobrepoe as hitboxes de PULO, USAR ou CORRER.
+	_draw_hud_v3_tool(Vector2(354.0, 327.0), 9, hammer_unlocked, hammer_cooldown / HAMMER_COOLDOWN)
+	_draw_hud_v3_tool(Vector2(414.0, 327.0), 10, horn_unlocked and horn_charges > 0, horn_cooldown / HORN_COOLDOWN)
+	_draw_hud_v3_tool(Vector2(466.0, 260.0), 11, nano_unlocked and (nano_charges > 0 or _nano_active()))
+	if horn_unlocked:
+		draw_string(ThemeDB.fallback_font, Vector2(431.0, 309.0), "%d" % horn_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f6dfb6"))
+	if nano_unlocked:
+		draw_string(ThemeDB.fallback_font, Vector2(482.0, 242.0), "%d" % nano_charges, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#d0e3c1"))
+	if _nano_active():
+		var fraction: float = clampf(nano_remaining / NANO_DURATION, 0.0, 1.0)
+		draw_arc(Vector2(466.0, 260.0), 23.0, -PI * 0.5, -PI * 0.5 + TAU * fraction, 28, Color("#9ff1bb"), 2.5)
+
+	# Controles identicos a arte de referencia: PULO e USAR na base,
+	# CORRER logo acima. USAR so funciona junto a alavanca valida.
+	var can_interact: bool = _nearby_lever_index() >= 0 and not pause_menu_open and not stage_complete and not game_over
+	_draw_hud_v3_control(Vector2(508.0, 323.0), 3, 59.0, 0.91 if can_interact else 0.40)
+	_draw_hud_v3_control(Vector2(585.0, 323.0), 2, 73.0, 0.94)
+	_draw_hud_v3_control(Vector2(588.0, 244.0), 4, 62.0 if run_touch_id != -1 else 59.0, 0.97 if run_touch_id != -1 else 0.73)
+	if can_interact:
+		draw_rect(Rect2(484.0, 282.0, 48.0, 16.0), Color(0.10, 0.09, 0.16, 0.78))
+		draw_string(ThemeDB.fallback_font, Vector2(492.0, 294.0), "USAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f6d6a7"))
+
+	# HUD superior: a arte aprovada recebe apenas textos e numeros dinamicos.
+	draw_texture_rect(hud_v3_bar, Rect2(0.0, 0.0, 640.0, 64.0), false)
+	draw_string(ThemeDB.fallback_font, Vector2(143.0, 29.0), "CIDADE DE PAPELAO", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("#fff0da"))
+	var objective: String = "EMPURRE A CAIXA"
+	if puzzle_gate_open and not checkpoint_active:
+		objective = "SIGA AO CHECKPOINT"
+	elif checkpoint_active and (lever_states.is_empty() or not lever_states[0]):
+		objective = "ENCONTRE A ALAVANCA"
+	elif lever_states.size() > 1 and not lever_states[1]:
+		objective = "LIGUE A PLATAFORMA"
+	elif lever_states.size() > 1 and lever_states[1]:
+		objective = "RESGATE A MORADORA"
+	if stage_complete:
+		objective = "RESGATE CONCLUIDO"
+	draw_string(ThemeDB.fallback_font, Vector2(145.0, 49.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f7d6aa"))
+
+	# Coracoes reais (sem coracoes falsamente preenchidos no fundo).
+	for i in range(MAX_HEALTH):
+		_draw_hud_v3_icon(Vector2(326.0 + float(i) * 24.0, 31.0), 0 if i < health else 2, 25.0)
+	_draw_hud_v3_icon(Vector2(425.0, 31.0), 3, 45.0)
+	draw_string(ThemeDB.fallback_font, Vector2(439.0, 48.0), "x%02d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff1d5"))
+	draw_string(ThemeDB.fallback_font, Vector2(501.0, 42.0), "x%03d" % medal_count, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#fff1d5"))
+	draw_string(ThemeDB.fallback_font, Vector2(601.0, 43.0), "%d/%d" % [_hud_v3_moved_crates(), crates.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff1d5"))
+	# Pausa discreta no canto: nao se sobrepoe ao contador das caixas.
+	_draw_hud_v3_icon(Vector2(623.0, 13.0), 13, 19.0, 0.94)
+
+	if ledge_hanging:
+		draw_rect(Rect2(178.0, 68.0, 276.0, 22.0), Color(0.05, 0.07, 0.12, 0.80))
+		draw_string(ThemeDB.fallback_font, Vector2(190.0, 83.0), "CIMA: SUBIR   BAIXO: SOLTAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#ffe4b4"))
+	if save_notice_time > 0.0 and not pause_menu_open:
+		draw_rect(Rect2(570.0, 68.0, 60.0, 17.0), Color(0.07, 0.19, 0.14, 0.85))
+		draw_string(ThemeDB.fallback_font, Vector2(579.0, 81.0), "SALVO", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#b3dfb4"))
+
 func _draw_controls() -> void:
+	if _hud_v3_ready():
+		_draw_controls_v3()
+		return
 	# Joystick invisivel ate o dedo esquerdo encostar, preservando multitouch.
 	if joystick_touch_id != -1:
 		draw_circle(joystick_origin, JOYSTICK_RADIUS + 2.0, Color(0.08, 0.10, 0.17, 0.36))
