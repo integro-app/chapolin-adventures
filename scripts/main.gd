@@ -2,6 +2,7 @@ extends Node2D
 
 # Cenário de testes horizontal. Toda a arte oficial do Chapolin segue intacta.
 const Stage = preload("res://scripts/stage_test.gd")
+const Feedback = preload("res://scripts/game_feedback.gd")
 const SPEED := 190.0
 const RUN_SPEED := 290.0
 const RUN_DELAY := 0.48
@@ -154,6 +155,7 @@ var title_has_save := false
 var title_clock := 0.0
 var stage_banner_timer := 0.0
 var scene_ambience_clock := 0.0
+var feedback = Feedback.new()
 var enemy_patrols: Array[Vector3] = []
 var enemy_positions: Array[Vector2] = []
 var enemy_directions: Array[float] = []
@@ -294,6 +296,7 @@ func _physics_process(delta: float) -> void:
 	if pause_menu_open:
 		queue_redraw()
 		return
+	feedback.tick(delta)
 	scene_ambience_clock += delta
 	stage_banner_timer = maxf(0.0, stage_banner_timer - delta)
 	if stage_complete or game_over:
@@ -374,6 +377,7 @@ func _physics_process(delta: float) -> void:
 	var is_jumping := (Input.is_action_just_pressed("ui_accept") or jump_requested) and grounded and not is_crouching
 	jump_requested = false
 	if is_jumping:
+		feedback.burst(hero_pos + Vector2(0.0, -3.0), "jump")
 		grounded = false
 		vertical_speed = JUMP_SPEED
 		air_time = 0.0
@@ -400,6 +404,7 @@ func _physics_process(delta: float) -> void:
 
 	# Captura a borda durante a queda, antes de aplicar os eventos do pouso.
 	if _try_grab_ledge():
+		feedback.burst(ledge_edge, "ledge")
 		if not _check_threat_collisions(previous_foot_y):
 			_update_level_progress()
 		_update_camera(delta)
@@ -409,6 +414,7 @@ func _physics_process(delta: float) -> void:
 	if grounded:
 		if not was_grounded:
 			landing_timer = 0.16
+			feedback.burst(hero_pos + Vector2(0.0, -2.0), "land")
 		else:
 			landing_timer = maxf(0.0, landing_timer - delta)
 	else:
@@ -675,6 +681,7 @@ func _activate_nearby_lever() -> void:
 	# nao desliga quando ele estiver em cima. Mantem estado no autosave.
 	lever_states[index] = true
 	_mark_save_dirty()
+	feedback.burst(Vector2(lever_points[index].x, lever_points[index].y - 32.0), "checkpoint", "ATIVADO")
 	queue_redraw()
 
 func _setup_moving_platforms() -> void:
@@ -981,6 +988,7 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 		if previous_foot_y <= enemy_top + 6.0 and hero_pos.y > previous_foot_y + 0.1:
 			enemy_active[i] = false
 			_mark_save_dirty()
+			feedback.burst(enemy_pos + Vector2(0.0, -16.0), "enemy", "DERROTADO")
 			hero_pos.y = enemy_top - 3.0
 			grounded = false
 			vertical_speed = ENEMY_STOMP_BOUNCE
@@ -1002,6 +1010,7 @@ func _take_damage(source_x: float) -> void:
 		return
 	health -= 1
 	_mark_save_dirty()
+	feedback.burst(hero_pos + Vector2(0.0, -48.0), "hurt", "-1 CORACAO")
 	if health <= 0:
 		_lose_life()
 		return
@@ -1074,6 +1083,7 @@ func _use_nano() -> void:
 		return
 	nano_charges -= 1
 	_mark_save_dirty()
+	feedback.burst(hero_pos + Vector2(0.0, -39.0), "nano", "NANICOLINA")
 	nano_remaining = NANO_DURATION
 	is_crouching = false
 	running = false
@@ -1090,6 +1100,7 @@ func _collect_nano_pickups() -> void:
 			_mark_save_dirty()
 			nano_unlocked = true
 			nano_charges = NANO_MAX_CHARGES
+			feedback.burst(pickup, "pickup", "NANICOLINA +3")
 
 func _use_hammer() -> void:
 	if stage_complete or game_over or not hammer_unlocked or hammer_cooldown > 0.0:
@@ -1106,6 +1117,7 @@ func _use_hammer() -> void:
 			enemy_active[i] = false
 			enemy_stun[i] = 0.0
 			_mark_save_dirty()
+			feedback.burst(enemy_pos + Vector2(0.0, -18.0), "enemy", "MARRETA!")
 	# A mesma Marreta tambem destroi paineis de papelao a frente.
 	for i in range(fragile_walls.size()):
 		if fragile_broken[i]:
@@ -1118,6 +1130,7 @@ func _use_hammer() -> void:
 			fragile_broken[i] = true
 			break_effects[i] = BREAK_EFFECT_SECONDS
 			_mark_save_dirty()
+			feedback.burst(wall.get_center(), "wood", "SEGREDO!")
 	queue_redraw()
 
 func _use_horn() -> void:
@@ -1125,6 +1138,7 @@ func _use_horn() -> void:
 		return
 	horn_charges -= 1
 	_mark_save_dirty()
+	feedback.burst(hero_pos + Vector2(float(facing) * 24.0, -48.0), "horn")
 	horn_cooldown = HORN_COOLDOWN
 	horn_effect_time = HORN_EFFECT_DURATION
 	horn_blast_origin = hero_pos + Vector2(float(facing) * 28.0, -48.0)
@@ -1160,6 +1174,8 @@ func _collect_combat_pickups() -> void:
 		elif kind == 3:
 			horn_unlocked = true
 			horn_charges = HORN_MAX_CHARGES
+		var caption: String = "MARRETA" if kind == 1 else ("CORNETA" if kind == 2 else "CARGAS +3")
+		feedback.burst(Vector2(pickup.x, pickup.y), "pickup", caption)
 
 func _collect_secret_rewards() -> void:
 	for i in range(secret_rewards.size()):
@@ -1177,6 +1193,7 @@ func _collect_secret_rewards() -> void:
 			health = mini(MAX_HEALTH, health + 1)
 		else:
 			lives = mini(SECRET_LIFE_LIMIT, lives + 1)
+		feedback.burst(reward, "secret", "CURA +1" if i == 0 else "VIDA EXTRA")
 		_mark_save_dirty()
 
 func _mark_save_dirty() -> void:
@@ -1365,6 +1382,7 @@ func _update_level_progress() -> void:
 			medal_collected[i] = true
 			medal_count += 1
 			_mark_save_dirty()
+			feedback.burst(medal, "medal", "+ MEDALHA")
 
 	var mark: Vector2 = Stage.checkpoint()
 	if not checkpoint_active and grounded:
@@ -1372,6 +1390,7 @@ func _update_level_progress() -> void:
 			checkpoint_active = true
 			respawn_point = mark
 			_mark_save_dirty()
+			feedback.burst(mark + Vector2(0.0, -52.0), "checkpoint", "CHECKPOINT!")
 			if not checkpoint_story_seen:
 				checkpoint_story_seen = true
 				_start_story("checkpoint")
@@ -1391,6 +1410,7 @@ func _update_level_progress() -> void:
 
 func _restart_stage() -> void:
 	# Recomeca a fase inteira; cair ou levar dano nao apaga o progresso.
+	feedback.reset()
 	title_active = false
 	stage_banner_timer = 0.0
 	pause_menu_open = false
@@ -1569,6 +1589,8 @@ func _draw() -> void:
 	# Pisca durante a invulnerabilidade sem alterar os sprites oficiais.
 	if hurt_grace <= 0.0 or int(hurt_grace * 14.0) % 2 == 0:
 		_draw_chapolin()
+	draw_set_transform(Vector2(-camera_x, 0.0), 0.0, Vector2.ONE)
+	feedback.draw_on(self)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if city_lights_art != null:
 		# O pano dos refletores vem depois dos personagens mas antes do HUD:
