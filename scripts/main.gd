@@ -74,6 +74,14 @@ const TITLE_PLAY_RECT := Rect2(60.0, 245.0, 211.0, 54.0)
 const TITLE_NEW_RECT := Rect2(286.0, 245.0, 211.0, 54.0)
 const STAGE_BANNER_DURATION := 3.4
 const HUD_PAUSE_RECT := Rect2(572.0, 4.0, 62.0, 48.0)
+# HUD v3 — layout da arte aprovada, em coordenadas 640x360.
+const HUD_V3_PAUSE_RECT := Rect2(600.0, 0.0, 40.0, 29.0)
+const HUD_V3_HAMMER_RECT := Rect2(329.0, 299.0, 51.0, 61.0)
+const HUD_V3_HORN_RECT := Rect2(386.0, 299.0, 53.0, 61.0)
+const HUD_V3_NANO_RECT := Rect2(441.0, 233.0, 50.0, 53.0)
+const HUD_V3_USE_RECT := Rect2(476.0, 288.0, 62.0, 71.0)
+const HUD_V3_JUMP_RECT := Rect2(547.0, 283.0, 87.0, 77.0)
+const HUD_V3_RUN_RECT := Rect2(554.0, 206.0, 82.0, 75.0)
 const SOUND_TOGGLE_RECT := Rect2(420.0, 65.0, 113.0, 36.0)
 
 var hero_pos := Vector2(120.0, 300.0)
@@ -109,6 +117,7 @@ var ledge_climb_to := Vector2.ZERO
 var crouch_held := false
 var is_crouching := false
 var joystick_touch_id := -1
+var run_touch_id := -1
 var joystick_origin := Vector2.ZERO
 var joystick_offset := Vector2.ZERO
 var jump_requested := false
@@ -201,6 +210,9 @@ var city_bg_art: Texture2D
 var city_mid_art: Texture2D
 var city_set_art: Texture2D
 var city_lights_art: Texture2D
+var hud_v3_bar: Texture2D
+var hud_v3_icons: Texture2D
+var hud_v3_controls: Texture2D
 var hud_icons: Texture2D
 var idle_texture: Texture2D
 var walk_texture: Texture2D
@@ -261,7 +273,14 @@ func _ready() -> void:
 	if ResourceLoader.exists("res://assets/stage/cidade_papelao_facades.svg"):
 		city_facades = load("res://assets/stage/cidade_papelao_facades.svg")
 
-	# Icones exclusivos da HUD; fallback vetorial se importacao falhar.
+	# HUD comercial v3: arte aprovada, atlases independentes e otimizados.
+	if ResourceLoader.exists("res://assets/hud/v3/hud_bar.webp"):
+		hud_v3_bar = load("res://assets/hud/v3/hud_bar.webp")
+	if ResourceLoader.exists("res://assets/hud/v3/hud_icons.webp"):
+		hud_v3_icons = load("res://assets/hud/v3/hud_icons.webp")
+	if ResourceLoader.exists("res://assets/hud/v3/hud_controls.webp"):
+		hud_v3_controls = load("res://assets/hud/v3/hud_controls.webp")
+	# Fallback v2 caso algum atlas ainda nao tenha importado no Godot.
 	if ResourceLoader.exists("res://assets/hud/icons_v2.svg"):
 		hud_icons = load("res://assets/hud/icons_v2.svg")
 
@@ -361,7 +380,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		run_hold_time += delta
 	run_direction = direction
-	running = direction != 0 and grounded and not is_crouching and run_hold_time >= RUN_DELAY and run_texture != null
+	running = direction != 0 and grounded and not is_crouching and (run_hold_time >= RUN_DELAY or run_touch_id != -1) and run_texture != null
 	var move_speed := NANO_SPEED if _nano_active() else (CROUCH_SPEED if is_crouching else (RUN_SPEED if running else SPEED))
 	var travel := axis * move_speed * delta
 	if not grounded and absf(rope_release_vx) > 0.1:
@@ -1451,6 +1470,7 @@ func _update_level_progress() -> void:
 
 func _restart_stage() -> void:
 	# Recomeca a fase inteira; cair ou levar dano nao apaga o progresso.
+	run_touch_id = -1
 	feedback.reset()
 	title_active = false
 	stage_banner_timer = 0.0
@@ -1655,6 +1675,7 @@ func _draw() -> void:
 func _begin_from_title(new_game: bool) -> void:
 	if not title_active:
 		return
+	run_touch_id = -1
 	title_active = false
 	_release_joystick()
 	jump_requested = false
@@ -2695,8 +2716,9 @@ func _pointer_pressed(pos: Vector2, pointer_id: int) -> void:
 			_restart_stage()
 		queue_redraw()
 		return
-	if not stage_complete and not game_over and HUD_PAUSE_RECT.has_point(pos):
+	if not stage_complete and not game_over and (HUD_V3_PAUSE_RECT.has_point(pos) if _hud_v3_ready() else HUD_PAUSE_RECT.has_point(pos)):
 		pause_menu_open = true
+		run_touch_id = -1
 		_release_joystick()
 		jump_requested = false
 		_save_game()
