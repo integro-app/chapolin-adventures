@@ -211,7 +211,8 @@ var city_bg_art: Texture2D
 var city_mid_art: Texture2D
 var city_set_art: Texture2D
 var city_lights_art: Texture2D
-var hud_v3_bar: Texture2D
+var hud_v4_bar: Texture2D
+var hud_v4_status_icons: Texture2D
 var hud_v3_icons: Texture2D
 var hud_v3_controls: Texture2D
 var hud_icons: Texture2D
@@ -282,9 +283,12 @@ func _ready() -> void:
 	if ResourceLoader.exists("res://assets/stage/cidade_papelao_facades.svg"):
 		city_facades = load("res://assets/stage/cidade_papelao_facades.svg")
 
-	# HUD comercial v3: arte aprovada, atlases independentes e otimizados.
-	if ResourceLoader.exists("res://assets/hud/v3/hud_bar.webp"):
-		hud_v3_bar = load("res://assets/hud/v3/hud_bar.webp")
+	# HUD v4 oficial: moldura sem icones ou dados gravados no fundo.
+	# Cada coracao, retrato, moeda e caixa e desenhado apenas uma vez.
+	if ResourceLoader.exists("res://assets/hud/v4/hud_bar_clean.webp"):
+		hud_v4_bar = load("res://assets/hud/v4/hud_bar_clean.webp")
+	if ResourceLoader.exists("res://assets/hud/v4/hud_status_icons.webp"):
+		hud_v4_status_icons = load("res://assets/hud/v4/hud_status_icons.webp")
 	if ResourceLoader.exists("res://assets/hud/v3/hud_icons.webp"):
 		hud_v3_icons = load("res://assets/hud/v3/hud_icons.webp")
 	if ResourceLoader.exists("res://assets/hud/v3/hud_controls.webp"):
@@ -2525,7 +2529,16 @@ func _draw_hud_count(center: Vector2, quantity: int) -> void:
 	draw_string(ThemeDB.fallback_font, center + Vector2(-3.0 if quantity < 10 else -6.0, 4.0), "%d" % quantity, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff2d8"))
 
 func _hud_v3_ready() -> bool:
-	return hud_v3_bar != null and hud_v3_icons != null and hud_v3_controls != null
+	return hud_v4_bar != null and hud_v4_status_icons != null and hud_v3_icons != null and hud_v3_controls != null
+
+func _draw_hud_v4_status_icon(center: Vector2, index: int, diameter: float, opacity: float = 1.0) -> void:
+	# Atlas horizontal: 8 icones de 96x96 pixels, transparentes.
+	# Nenhum icone e repetido na textura da moldura.
+	if hud_v4_status_icons == null:
+		return
+	var region := Rect2(float(index) * 96.0, 0.0, 96.0, 96.0)
+	var dest := Rect2(center - Vector2.ONE * diameter * 0.5, Vector2.ONE * diameter)
+	draw_texture_rect_region(hud_v4_status_icons, dest, region, Color(1.0, 1.0, 1.0, opacity))
 
 func _draw_hud_v3_icon(center: Vector2, index: int, diameter: float, opacity: float = 1.0) -> void:
 	# Icones de 112x112 em grade 4x4, todos extraidos da arte aprovada.
@@ -2597,10 +2610,11 @@ func _draw_controls_v3() -> void:
 		draw_rect(Rect2(484.0, 282.0, 48.0, 16.0), Color(0.10, 0.09, 0.16, 0.78))
 		draw_string(ThemeDB.fallback_font, Vector2(492.0, 294.0), "USAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f6d6a7"))
 
-	# HUD superior: a arte aprovada recebe apenas textos e numeros dinamicos.
-	draw_texture_rect(hud_v3_bar, Rect2(0.0, 0.0, 640.0, 64.0), false)
-	draw_string(ThemeDB.fallback_font, Vector2(144.0, 18.0), "PRÓLOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#dfa96b"))
-	draw_string(ThemeDB.fallback_font, Vector2(143.0, 32.0), "CIDADE DE PAPELÃO", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#fff0da"))
+	# Topo HUD v4: UMA textura limpa, sem texto ou contadores embutidos.
+	# Barras e imagens antigas foram removidas da composicao oficial.
+	draw_texture_rect(hud_v4_bar, Rect2(0.0, 0.0, 640.0, 65.0), false)
+	draw_string(ThemeDB.fallback_font, Vector2(152.0, 21.0), "PRÓLOGO", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#e4bb87"))
+	draw_string(ThemeDB.fallback_font, Vector2(152.0, 35.0), "CIDADE DE PAPELÃO", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff0da"))
 	var objective: String = "EMPURRE A CAIXA"
 	if puzzle_gate_open and not checkpoint_active:
 		objective = "SIGA AO CHECKPOINT"
@@ -2612,17 +2626,24 @@ func _draw_controls_v3() -> void:
 		objective = "RESGATE A MORADORA"
 	if stage_complete:
 		objective = "RESGATE CONCLUIDO"
-	draw_string(ThemeDB.fallback_font, Vector2(145.0, 49.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f7d6aa"))
+	_draw_hud_v4_status_icon(Vector2(152.0, 50.0), 7, 10.0)
+	draw_string(ThemeDB.fallback_font, Vector2(163.0, 55.0), objective, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#f7d6aa"))
 
-	# Coracoes reais (sem coracoes falsamente preenchidos no fundo).
+	# Vida: tres icones independentes, sem molduras de coracao duplicadas.
 	for i in range(MAX_HEALTH):
-		_draw_hud_v3_icon(Vector2(326.0 + float(i) * 24.0, 31.0), 0 if i < health else 2, 25.0)
-	_draw_hud_v3_icon(Vector2(425.0, 31.0), 3, 45.0)
-	draw_string(ThemeDB.fallback_font, Vector2(439.0, 48.0), "x%02d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff1d5"))
-	draw_string(ThemeDB.fallback_font, Vector2(501.0, 42.0), "x%03d" % medal_count, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#fff1d5"))
+		_draw_hud_v4_status_icon(Vector2(341.0 + float(i) * 25.0, 36.0), 0 if i < health else 1, 28.0)
+
+	# Retrato, vidas, medalhas e caixas: valores reais do estado do jogo.
+	_draw_hud_v4_status_icon(Vector2(452.0, 36.0), 3, 37.0)
+	draw_string(ThemeDB.fallback_font, Vector2(460.0, 55.0), "x%02d" % lives, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#fff1d5"))
+	_draw_hud_v4_status_icon(Vector2(491.0, 38.0), 4, 30.0)
+	draw_string(ThemeDB.fallback_font, Vector2(512.0, 43.0), "x%03d" % medal_count, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff1d5"))
+	_draw_hud_v4_status_icon(Vector2(581.0, 37.0), 5, 29.0)
 	draw_string(ThemeDB.fallback_font, Vector2(601.0, 43.0), "%d/%d" % [_hud_v3_moved_crates(), crates.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#fff1d5"))
-	# Pausa discreta no canto: nao se sobrepoe ao contador das caixas.
-	_draw_hud_v3_icon(Vector2(623.0, 13.0), 13, 19.0, 0.94)
+
+	# Pausa: apenas o simbolo sobre o circulo vazio ja presente na moldura.
+	draw_rect(Rect2(618.0, 8.0, 3.0, 9.0), Color("#ffe5aa"))
+	draw_rect(Rect2(624.0, 8.0, 3.0, 9.0), Color("#ffe5aa"))
 
 	if ledge_hanging:
 		draw_rect(Rect2(178.0, 68.0, 276.0, 22.0), Color(0.05, 0.07, 0.12, 0.80))

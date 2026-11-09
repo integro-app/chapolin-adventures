@@ -49,12 +49,23 @@ if ! cmp -s "$TEMP_DIR/scripts/main.gd" "$DEST_DIR/scripts/main.gd"; then
   echo "ERRO: scripts/main.gd divergiu na pasta do Godot." >&2
   exit 1
 fi
-for asset in hud_bar.webp hud_controls.webp hud_icons.webp; do
+for asset in hud_controls.webp hud_icons.webp; do
   if [[ ! -s "$DEST_DIR/assets/hud/v3/$asset" ]]; then
-    echo "ERRO: arte da HUD nao foi copiada: $asset" >&2
+    echo "ERRO: controle legado de habilidade nao copiado: $asset" >&2
     exit 1
   fi
 done
+for asset in hud_bar_clean.webp hud_status_icons.webp; do
+  if [[ ! -s "$DEST_DIR/assets/hud/v4/$asset" ]]; then
+    echo "ERRO: arte limpa da HUD v4 nao foi copiada: $asset" >&2
+    exit 1
+  fi
+done
+# Impede que a barra v3 gravada com coracoes falsos fique no projeto instalado.
+if [[ -e "$DEST_DIR/assets/hud/v3/hud_bar.webp" ]]; then
+  echo "ERRO: arquivo de barra v3 antigo ainda existe no projeto Godot." >&2
+  exit 1
+fi
 
 echo
 echo "SINCRONIZACAO CONFIRMADA: commit $SHORT_REV"
