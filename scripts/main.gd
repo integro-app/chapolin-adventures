@@ -2022,7 +2022,8 @@ func _draw_nano_tunnel(tunnel: Rect2) -> void:
 	draw_rect(Rect2(tunnel.position.x + 3.0, tunnel.position.y + 2.0, tunnel.size.x - 6.0, tunnel.size.y - 5.0), Color("#bd926d"))
 	draw_line(Vector2(tunnel.position.x, tunnel.end.y - 2.0), Vector2(tunnel.end.x, tunnel.end.y - 2.0), Color("#f0c79d"), 3.0)
 	draw_line(tunnel.position + Vector2(5.0, 2.0), tunnel.end - Vector2(5.0, 2.0), Color("#795356"), 2.0)
-	draw_string(ThemeDB.fallback_font, Vector2(tunnel.position.x + 3.0, tunnel.position.y - 8.0), "NANICOLINA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#ffe7ae"))
+	if city_set_art == null:
+		draw_string(ThemeDB.fallback_font, Vector2(tunnel.position.x + 3.0, tunnel.position.y - 8.0), "NANICOLINA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#ffe7ae"))
 
 func _draw_nano_pickup(pos: Vector2) -> void:
 	draw_circle(pos + Vector2(1.0, 2.0), 13.0, Color("#443841"))
@@ -2039,7 +2040,10 @@ func _draw_fragile_wall(wall: Rect2) -> void:
 	draw_line(wall.position + Vector2(5.0, 4.0), wall.position + Vector2(15.0, 18.0), Color("#694d4a"), 2.0)
 	draw_line(wall.position + Vector2(15.0, 18.0), wall.position + Vector2(8.0, 30.0), Color("#694d4a"), 2.0)
 	draw_line(wall.position + Vector2(8.0, 30.0), wall.position + Vector2(17.0, 40.0), Color("#694d4a"), 2.0)
-	draw_string(ThemeDB.fallback_font, wall.position + Vector2(-13.0, -8.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f0d09e"))
+	# O tutorial antigo imprimia MARRETA sobre o cenário final.
+	# Mantemos o rótulo apenas no fallback sem a arte dos objetos.
+	if city_set_art == null:
+		draw_string(ThemeDB.fallback_font, wall.position + Vector2(-13.0, -8.0), "MARRETA", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color("#f0d09e"))
 
 func _draw_paper_debris(wall: Rect2, time_left: float) -> void:
 	var progress: float = 1.0 - time_left / BREAK_EFFECT_SECONDS
@@ -2252,7 +2256,8 @@ func _draw_low_beam(beam: Rect2) -> void:
 	draw_line(Vector2(beam.position.x, beam.end.y - 3.0), Vector2(beam.end.x, beam.end.y - 3.0), Color("#e1c393"), 3.0)
 	draw_circle(Vector2(beam.position.x + 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
 	draw_circle(Vector2(beam.end.x - 6.0, beam.position.y + 7.0), 2.0, Color("#e4cda6"))
-	draw_string(ThemeDB.fallback_font, Vector2(mid_x - 23.0, beam.position.y + 15.0), "AGACHE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#392d33"))
+	if city_set_art == null:
+		draw_string(ThemeDB.fallback_font, Vector2(mid_x - 23.0, beam.position.y + 15.0), "AGACHE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color("#392d33"))
 
 func _draw_rescue_npc() -> void:
 	# Figurante presa perto da saida, com visual de cenario televisivo.
@@ -2434,8 +2439,9 @@ func _draw_lever(index: int) -> void:
 	var handle_direction: float = 1.0 if activated else -1.0
 	draw_line(base + Vector2(0.0, -24.0), base + Vector2(handle_direction * 14.0, -43.0), Color("#c2a58a"), 4.0)
 	draw_circle(base + Vector2(handle_direction * 14.0, -43.0), 6.0, Color("#70ba7c") if activated else Color("#e3a960"))
-	var name: String = "GRADE" if index == 0 else "PLATAFORMA"
-	draw_string(ThemeDB.fallback_font, base + Vector2(-27.0, -53.0), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e9d1ad"))
+	if city_set_art == null:
+		var name: String = "GRADE" if index == 0 else "PLATAFORMA"
+		draw_string(ThemeDB.fallback_font, base + Vector2(-27.0, -53.0), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("#e9d1ad"))
 	var status_color := Color("#7fc38d") if activated else Color("#d6aa75")
 	draw_circle(base + Vector2(0.0, -16.0), 3.0, status_color)
 
