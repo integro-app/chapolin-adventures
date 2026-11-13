@@ -2047,7 +2047,9 @@ func _draw_horn_wave() -> void:
 func _draw_alma_negra(pos: Vector2, direction: float, stunned: bool) -> void:
 	# Vilao demo proporcional: 1,77 m / 1,55 m = 1,142x o Chapolin.
 	var look: float = 1.0 if direction >= 0.0 else -1.0
-	var s: float = RAMON_TO_CHAPOLIN_SCALE
+	# O desenho-base abaixo ocupa 137 px ate o topo do tricornio.
+	# Escalamos esse desenho para DEMO_VILLAIN_HEIGHT (~115 px), mantendo 1,142x.
+	var s: float = DEMO_VILLAIN_HEIGHT / 137.0
 	var skin := Color("#c58b68")
 	var outline := Color("#241f2a")
 	var black := Color("#191923")
@@ -2393,6 +2395,9 @@ func _draw_chapolin() -> void:
 	var drawn_height: float = STAND_HEIGHT
 	var drawn_width := frame_size.x * drawn_height / frame_size.y
 	var dest := Rect2(-drawn_width / 2.0, -drawn_height, drawn_width, drawn_height)
+	if current_animation == "run" and run_texture != null:
+		# Compensa a margem transparente inferior do atlas sem aumentar o personagem.
+		dest.position.y += 4.0
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_pause_inventory() -> void:
