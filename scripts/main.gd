@@ -14,6 +14,11 @@ const WALK_FPS := 8.3
 const SCREEN_WIDTH := 640.0
 const HERO_HALF_WIDTH := 11.0
 const STAND_HEIGHT := 101.0
+const CHAPOLIN_HEIGHT_METERS := 1.55
+const RAMON_HEIGHT_METERS := 1.77
+const RAMON_TO_CHAPOLIN_SCALE := RAMON_HEIGHT_METERS / CHAPOLIN_HEIGHT_METERS
+const DEMO_VILLAIN_HEIGHT := STAND_HEIGHT * RAMON_TO_CHAPOLIN_SCALE
+const DEMO_VILLAIN_HALF_WIDTH := 15.0
 const CROUCH_HEIGHT := 83.0
 const CROUCH_SPEED := 92.0
 const CLIMB_SPEED := 90.0
@@ -1001,6 +1006,17 @@ func _reset_enemies() -> void:
 		enemy_active.append(true)
 		enemy_stun.append(0.0)
 
+# Primeiro inimigo da fase demo: Pirata Alma Negra na escala corporal oficial
+# de Ramon Valdes (1,77 m) contra Chapolin (1,55 m).
+func _is_demo_villain(index: int) -> bool:
+	return index == 0
+
+func _enemy_collision_height(index: int) -> float:
+	return DEMO_VILLAIN_HEIGHT if _is_demo_villain(index) else ENEMY_HEIGHT
+
+func _enemy_collision_half_width(index: int) -> float:
+	return DEMO_VILLAIN_HALF_WIDTH if _is_demo_villain(index) else ENEMY_HALF_WIDTH
+
 func _update_enemy_patrols(delta: float) -> void:
 	for i in range(enemy_positions.size()):
 		if not enemy_active[i]:
@@ -1040,8 +1056,10 @@ func _check_threat_collisions(previous_foot_y: float) -> bool:
 			# Figurantes paralisados nao causam dano por contato.
 			continue
 		var enemy_pos: Vector2 = enemy_positions[i]
-		var enemy_top: float = enemy_pos.y - ENEMY_HEIGHT
-		var enemy_box := Rect2(enemy_pos.x - ENEMY_HALF_WIDTH, enemy_top, ENEMY_HALF_WIDTH * 2.0, ENEMY_HEIGHT)
+		var enemy_height: float = _enemy_collision_height(i)
+		var enemy_half_width: float = _enemy_collision_half_width(i)
+		var enemy_top: float = enemy_pos.y - enemy_height
+		var enemy_box := Rect2(enemy_pos.x - enemy_half_width, enemy_top, enemy_half_width * 2.0, enemy_height)
 		if not hero_box.intersects(enemy_box):
 			continue
 		# Ao cair de cima, vence o inimigo e ganha rebote.
@@ -1648,7 +1666,7 @@ func _draw() -> void:
 		_draw_horn_wave()
 	for i in range(enemy_positions.size()):
 		if enemy_active[i]:
-			_draw_paper_enemy(enemy_positions[i], enemy_directions[i], enemy_stun[i] > 0.0)
+			_draw_paper_enemy(enemy_positions[i], enemy_directions[i], enemy_stun[i] > 0.0, i)
 	for i in range(moving_obstacles.size()):
 		_draw_rolling_obstacle(_obstacle_position(moving_obstacles[i], i))
 	if hurt_grace > 0.0:
@@ -2026,9 +2044,86 @@ func _draw_horn_wave() -> void:
 	draw_arc(horn_blast_origin, radius, start_angle, end_angle, 32, Color(0.57, 0.89, 0.99, 0.80 - progress * 0.65), 3.0)
 	draw_circle(horn_blast_origin, 6.0, Color("#e2c993"))
 
-func _draw_paper_enemy(pos: Vector2, direction: float, stunned: bool) -> void:
+func _draw_alma_negra(pos: Vector2, direction: float, stunned: bool) -> void:
+	# Vilao demo proporcional: 1,77 m / 1,55 m = 1,142x o Chapolin.
+	var look: float = 1.0 if direction >= 0.0 else -1.0
+	var s: float = RAMON_TO_CHAPOLIN_SCALE
+	var skin := Color("#c58b68")
+	var outline := Color("#241f2a")
+	var black := Color("#191923")
+	var boot := Color("#25212a")
+	var brown := Color("#4b302b")
+	var bronze := Color("#b4773e")
+	var bronze_light := Color("#d5a261")
+	var wine := Color("#7c2637")
+	var gold := Color("#e6b765")
+
+	# Sombra, botas e pernas.
+	var shadow := PackedVector2Array()
+	for k in range(24):
+		var a := TAU * float(k) / 24.0
+		shadow.append(pos + Vector2(cos(a) * 20.0 * s, sin(a) * 4.0))
+	draw_colored_polygon(shadow, Color(0.03, 0.03, 0.06, 0.42))
+	draw_rect(Rect2(pos.x - 15.0 * s, pos.y - 12.0 * s, 12.0 * s, 12.0 * s), boot)
+	draw_rect(Rect2(pos.x + 3.0 * s, pos.y - 12.0 * s, 12.0 * s, 12.0 * s), boot)
+	draw_line(pos + Vector2(-8.0 * s, -33.0 * s), pos + Vector2(-9.0 * s, -7.0 * s), brown, 8.0 * s)
+	draw_line(pos + Vector2(8.0 * s, -33.0 * s), pos + Vector2(9.0 * s, -7.0 * s), brown, 8.0 * s)
+
+	# Calca, faixa e cinto.
+	draw_colored_polygon(PackedVector2Array([
+		pos + Vector2(-17.0 * s, -58.0 * s), pos + Vector2(16.0 * s, -58.0 * s),
+		pos + Vector2(12.0 * s, -31.0 * s), pos + Vector2(-13.0 * s, -31.0 * s)
+	]), brown)
+	draw_rect(Rect2(pos.x - 19.0 * s, pos.y - 62.0 * s, 38.0 * s, 8.0 * s), wine)
+	draw_rect(Rect2(pos.x - 17.0 * s, pos.y - 67.0 * s, 34.0 * s, 6.0 * s), black)
+	draw_rect(Rect2(pos.x - 3.0 * s, pos.y - 68.0 * s, 7.0 * s, 8.0 * s), gold)
+
+	# Camisa pirata dourada, mangas bufantes e talabarte.
+	draw_colored_polygon(PackedVector2Array([
+		pos + Vector2(-17.0 * s, -96.0 * s), pos + Vector2(17.0 * s, -96.0 * s),
+		pos + Vector2(20.0 * s, -66.0 * s), pos + Vector2(-20.0 * s, -66.0 * s)
+	]), bronze)
+	draw_rect(Rect2(pos.x - 13.0 * s, pos.y - 92.0 * s, 26.0 * s, 4.0 * s), bronze_light)
+	draw_line(pos + Vector2(-16.0 * s, -89.0 * s), pos + Vector2(-27.0 * s, -70.0 * s), bronze, 8.0 * s)
+	draw_line(pos + Vector2(16.0 * s, -89.0 * s), pos + Vector2(28.0 * s, -72.0 * s), bronze, 8.0 * s)
+	draw_circle(pos + Vector2(-29.0 * s, -68.0 * s), 4.2 * s, skin)
+	draw_circle(pos + Vector2(30.0 * s, -69.0 * s), 4.2 * s, skin)
+	draw_line(pos + Vector2(-12.0 * s, -96.0 * s), pos + Vector2(13.0 * s, -63.0 * s), wine, 6.0 * s)
+
+	# Sabre na cintura.
+	draw_line(pos + Vector2(-16.0 * s, -62.0 * s), pos + Vector2(-24.0 * s, -27.0 * s), outline, 5.0 * s)
+	draw_line(pos + Vector2(-24.0 * s, -27.0 * s), pos + Vector2(-30.0 * s, -16.0 * s), gold, 2.5 * s)
+
+	# Rosto-base magro de Ramon, bigode e tapa-olho.
+	draw_rect(Rect2(pos.x - 5.0 * s, pos.y - 101.0 * s, 10.0 * s, 8.0 * s), skin)
+	draw_circle(pos + Vector2(0.0, -108.0 * s), 13.0 * s, skin)
+	draw_circle(pos + Vector2(look * 8.0 * s, -106.0 * s), 4.0 * s, skin)
+	draw_circle(pos + Vector2(look * 4.0 * s, -111.0 * s), 1.6 * s, Color("#261f25"))
+	draw_line(pos + Vector2(-8.0 * s, -101.0 * s), pos + Vector2(7.0 * s, -101.0 * s), outline, 4.0 * s)
+	var patch_x: float = -look * 4.0 * s
+	draw_circle(pos + Vector2(patch_x, -111.0 * s), 4.8 * s, black)
+	draw_line(pos + Vector2(-9.0 * s, -117.0 * s), pos + Vector2(9.0 * s, -108.0 * s), black, 2.0 * s)
+
+	# Tricornio preto, caveira e ossos.
+	draw_colored_polygon(PackedVector2Array([
+		pos + Vector2(-21.0 * s, -123.0 * s), pos + Vector2(0.0, -137.0 * s),
+		pos + Vector2(22.0 * s, -123.0 * s), pos + Vector2(14.0 * s, -118.0 * s),
+		pos + Vector2(-14.0 * s, -118.0 * s)
+	]), black)
+	draw_circle(pos + Vector2(0.0, -126.0 * s), 3.3 * s, Color("#eee1c2"))
+	draw_line(pos + Vector2(-5.0 * s, -121.5 * s), pos + Vector2(5.0 * s, -116.0 * s), Color("#eee1c2"), 1.5 * s)
+	draw_line(pos + Vector2(5.0 * s, -121.5 * s), pos + Vector2(-5.0 * s, -116.0 * s), Color("#eee1c2"), 1.5 * s)
+
+	if stunned:
+		draw_arc(pos + Vector2(0.0, -78.0 * s), 31.0 * s, 0.0, TAU, 28, Color("#86d7e9"), 2.0)
+		draw_string(ThemeDB.fallback_font, pos + Vector2(-10.0 * s, -143.0 * s), "ZZ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d1f7ff"))
+
+func _draw_paper_enemy(pos: Vector2, direction: float, stunned: bool, enemy_index: int = -1) -> void:
+	if _is_demo_villain(enemy_index):
+		_draw_alma_negra(pos, direction, stunned)
+		return
 	# Capanga de televisao: boina, bigode e colete, substituindo apenas a
-	# aparencia do robo de papelao. A colisao ENEMY_HEIGHT continua intocada.
+	# aparencia do robo de papelao. A colisao dos figurantes continua intocada.
 	var look: float = 1.0 if direction >= 0.0 else -1.0
 	# Botas e pernas.
 	draw_rect(Rect2(pos.x - 10.0, pos.y - 7.0, 8.0, 7.0), Color("#282836"))
@@ -2293,12 +2388,11 @@ func _draw_chapolin() -> void:
 		frame = int(floor(animation_time * fps)) % 8
 	var frame_size := Vector2(float(sprite.get_width()) / 8.0, float(sprite.get_height()))
 	var region := Rect2(float(frame) * frame_size.x, 0.0, frame_size.x, frame_size.y)
-	# Corrida tem atlas maior e 4px transparentes na base: respeita a altura oficial.
-	var drawn_height := 112.0 if current_animation == "run" and run_texture != null else 101.0
+	# Todas as animacoes preservam a mesma altura corporal oficial do Chapolin.
+	# O atlas de corrida e maior, mas nao pode fazer o personagem crescer.
+	var drawn_height: float = STAND_HEIGHT
 	var drawn_width := frame_size.x * drawn_height / frame_size.y
 	var dest := Rect2(-drawn_width / 2.0, -drawn_height, drawn_width, drawn_height)
-	if current_animation == "run" and run_texture != null:
-		dest.position.y += 4.0
 	draw_texture_rect_region(sprite, dest, region, Color.WHITE, false, true)
 
 func _draw_pause_inventory() -> void:
