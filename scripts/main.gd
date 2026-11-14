@@ -316,10 +316,12 @@ func _ready() -> void:
 	# do editor Godot Android. Assim um asset novo funciona na primeira abertura.
 	var tripa_path := "res://assets/enemies/tripa_seca_idle.png"
 	if FileAccess.file_exists(tripa_path):
-		var tripa_image := Image.new()
-		var tripa_error := tripa_image.load(tripa_path)
-		if tripa_error == OK and not tripa_image.is_empty():
-			tripa_seca_texture = ImageTexture.create_from_image(tripa_image)
+		var tripa_bytes: PackedByteArray = FileAccess.get_file_as_bytes(tripa_path)
+		if not tripa_bytes.is_empty():
+			var tripa_image := Image.new()
+			var tripa_error := tripa_image.load_png_from_buffer(tripa_bytes)
+			if tripa_error == OK and not tripa_image.is_empty():
+				tripa_seca_texture = ImageTexture.create_from_image(tripa_image)
 	if tripa_seca_texture == null and ResourceLoader.exists(tripa_path):
 		tripa_seca_texture = load(tripa_path)
 	_setup_sfx()
