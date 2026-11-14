@@ -316,10 +316,11 @@ func _ready() -> void:
 	# do editor Godot Android. Assim um asset novo funciona na primeira abertura.
 	var tripa_path := "res://assets/enemies/tripa_seca_idle.png"
 	if FileAccess.file_exists(tripa_path):
-		var tripa_image := Image.load_from_file(tripa_path)
-		if tripa_image != null and not tripa_image.is_empty():
+		var tripa_image := Image.new()
+		var tripa_error := tripa_image.load(tripa_path)
+		if tripa_error == OK and not tripa_image.is_empty():
 			tripa_seca_texture = ImageTexture.create_from_image(tripa_image)
-	elif ResourceLoader.exists(tripa_path):
+	if tripa_seca_texture == null and ResourceLoader.exists(tripa_path):
 		tripa_seca_texture = load(tripa_path)
 	_setup_sfx()
 	# A tela inicial deixa o jogador escolher continuar ou iniciar a aventura.
@@ -1019,7 +1020,9 @@ func _reset_enemies() -> void:
 # Primeiro inimigo da fase demo: Tripa Seca oficial.
 # O corpo usa a escala de Ramon Valdes (1,77 m) contra Chapolin (1,55 m).
 func _is_demo_villain(index: int) -> bool:
-	return index == 0
+	# Durante homologacao, TODAS as patrulhas usam o Tripa Seca oficial.
+	# Depois da aprovacao visual voltamos a limitar ao inimigo desejado.
+	return index >= 0
 
 func _enemy_collision_height(index: int) -> float:
 	return DEMO_VILLAIN_HEIGHT if _is_demo_villain(index) else ENEMY_HEIGHT
@@ -2143,8 +2146,13 @@ func _draw_alma_negra(pos: Vector2, direction: float, stunned: bool) -> void:
 		draw_string(ThemeDB.fallback_font, pos + Vector2(-10.0 * s, -143.0 * s), "ZZ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d1f7ff"))
 
 func _draw_paper_enemy(pos: Vector2, direction: float, stunned: bool, enemy_index: int = -1) -> void:
-	if _is_demo_villain(enemy_index) and tripa_seca_texture != null:
-		_draw_tripa_seca_enemy(pos, stunned)
+	if _is_demo_villain(enemy_index):
+		if tripa_seca_texture != null:
+			_draw_tripa_seca_enemy(pos, stunned)
+		else:
+			# Diagnostico visivel: nunca esconder falha de asset com inimigo generico.
+			draw_rect(Rect2(pos.x - 24.0, pos.y - 115.0, 48.0, 115.0), Color("#b00020"))
+			draw_string(ThemeDB.fallback_font, pos + Vector2(-31.0, -122.0), "ERRO TRIPA", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.WHITE)
 		return
 	# Capanga de televisao: boina, bigode e colete, substituindo apenas a
 	# aparencia do robo de papelao. A colisao dos figurantes continua intocada.
