@@ -225,6 +225,7 @@ var idle_texture: Texture2D
 var walk_texture: Texture2D
 var run_texture: Texture2D
 var jump_texture: Texture2D
+var tripa_seca_texture: Texture2D
 
 func _ready() -> void:
 	# A revisao mostrada no menu identifica QUAL copia foi aberta no Godot.
@@ -311,6 +312,8 @@ func _ready() -> void:
 		run_texture = load("res://assets/chapolin/run.png")
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
+	if ResourceLoader.exists("res://assets/enemies/tripa_seca_idle.png"):
+		tripa_seca_texture = load("res://assets/enemies/tripa_seca_idle.png")
 	_setup_sfx()
 	# A tela inicial deixa o jogador escolher continuar ou iniciar a aventura.
 	title_has_save = FileAccess.file_exists(SAVE_PATH)
@@ -1006,8 +1009,8 @@ func _reset_enemies() -> void:
 		enemy_active.append(true)
 		enemy_stun.append(0.0)
 
-# Primeiro inimigo da fase demo: Pirata Alma Negra na escala corporal oficial
-# de Ramon Valdes (1,77 m) contra Chapolin (1,55 m).
+# Primeiro inimigo da fase demo: Tripa Seca oficial.
+# O corpo usa a escala de Ramon Valdes (1,77 m) contra Chapolin (1,55 m).
 func _is_demo_villain(index: int) -> bool:
 	return index == 0
 
@@ -2044,6 +2047,17 @@ func _draw_horn_wave() -> void:
 	draw_arc(horn_blast_origin, radius, start_angle, end_angle, 32, Color(0.57, 0.89, 0.99, 0.80 - progress * 0.65), 3.0)
 	draw_circle(horn_blast_origin, 6.0, Color("#e2c993"))
 
+func _draw_tripa_seca_enemy(pos: Vector2, stunned: bool) -> void:
+	# Usa diretamente a arte oficial aprovada, sem redesenhar rosto/corpo.
+	# PNG preparado com 128 px totais; cerca de 115 px correspondem ao corpo,
+	# e o restante e o chapeu, que nao entra na altura corporal oficial.
+	var size := Vector2(float(tripa_seca_texture.get_width()), float(tripa_seca_texture.get_height()))
+	var dest := Rect2(pos.x - size.x * 0.5, pos.y - size.y, size.x, size.y)
+	draw_texture_rect(tripa_seca_texture, dest, false, Color.WHITE)
+	if stunned:
+		draw_arc(pos + Vector2(0.0, -78.0), 33.0, 0.0, TAU, 28, Color("#86d7e9"), 2.0)
+		draw_string(ThemeDB.fallback_font, pos + Vector2(-10.0, -136.0), "ZZ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d1f7ff"))
+
 func _draw_alma_negra(pos: Vector2, direction: float, stunned: bool) -> void:
 	# Vilao demo proporcional: 1,77 m / 1,55 m = 1,142x o Chapolin.
 	var look: float = 1.0 if direction >= 0.0 else -1.0
@@ -2122,8 +2136,8 @@ func _draw_alma_negra(pos: Vector2, direction: float, stunned: bool) -> void:
 		draw_string(ThemeDB.fallback_font, pos + Vector2(-10.0 * s, -143.0 * s), "ZZ", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#d1f7ff"))
 
 func _draw_paper_enemy(pos: Vector2, direction: float, stunned: bool, enemy_index: int = -1) -> void:
-	if _is_demo_villain(enemy_index):
-		_draw_alma_negra(pos, direction, stunned)
+	if _is_demo_villain(enemy_index) and tripa_seca_texture != null:
+		_draw_tripa_seca_enemy(pos, stunned)
 		return
 	# Capanga de televisao: boina, bigode e colete, substituindo apenas a
 	# aparencia do robo de papelao. A colisao dos figurantes continua intocada.
