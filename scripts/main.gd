@@ -312,8 +312,15 @@ func _ready() -> void:
 		run_texture = load("res://assets/chapolin/run.png")
 	if ResourceLoader.exists("res://assets/chapolin/jump.png"):
 		jump_texture = load("res://assets/chapolin/jump.png")
-	if ResourceLoader.exists("res://assets/enemies/tripa_seca_idle.png"):
-		tripa_seca_texture = load("res://assets/enemies/tripa_seca_idle.png")
+	# Inimigos oficiais: carrega o PNG bruto para nao depender do cache/importador
+	# do editor Godot Android. Assim um asset novo funciona na primeira abertura.
+	var tripa_path := "res://assets/enemies/tripa_seca_idle.png"
+	if FileAccess.file_exists(tripa_path):
+		var tripa_image := Image.load_from_file(tripa_path)
+		if tripa_image != null and not tripa_image.is_empty():
+			tripa_seca_texture = ImageTexture.create_from_image(tripa_image)
+	elif ResourceLoader.exists(tripa_path):
+		tripa_seca_texture = load(tripa_path)
 	_setup_sfx()
 	# A tela inicial deixa o jogador escolher continuar ou iniciar a aventura.
 	title_has_save = FileAccess.file_exists(SAVE_PATH)
