@@ -61,6 +61,10 @@ for asset in hud_bar_clean.webp hud_status_icons.webp; do
     exit 1
   fi
 done
+if [[ ! -s "$DEST_DIR/assets/enemies/tripa_seca_idle.png" ]]; then
+  echo "ERRO: Tripa Seca oficial nao foi copiado para o projeto Godot." >&2
+  exit 1
+fi
 # Impede que a barra v3 gravada com coracoes falsos fique no projeto instalado.
 if [[ -e "$DEST_DIR/assets/hud/v3/hud_bar.webp" ]]; then
   echo "ERRO: arquivo de barra v3 antigo ainda existe no projeto Godot." >&2
